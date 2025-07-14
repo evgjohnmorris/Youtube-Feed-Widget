@@ -1,7 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>a<!DOCTYPE html>
-<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -144,8 +142,8 @@
       /* ------------------------------------------------------
        * CONFIGURATION
        * ---------------------------------------------------- */
-      const API_KEY = "AIzaSyDT7go0eQEFqlAU_bc-xe398xT0I1_CCps"; // 🔑 Replace with your YouTube Data v3 API key
-      const CHANNEL_ID = "UCOPBWWtc27ePtGD4dcqIFmA"; // 📺 Replace with the desired channel ID
+      const API_KEY = "YOUR_API_KEY"; // 🔑 Replace with your YouTube Data v3 API key
+      const CHANNEL_ID = "YOUR_CHANNEL_ID"; // 📺 Replace with the desired channel ID
       const MAX_RESULTS = 25; // Number of latest videos to fetch
 
       /* ------------------------------------------------------
@@ -243,90 +241,4 @@
       init();
     </script>
   </body>
-</html>
-
-<meta charset="UTF-8">
-<title>Youtube Feed Widget</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-  /* ── basic layout ────────────────────────────────────────────────────────── */
-  body{font-family:sans-serif;margin:0;padding:0;background:#f9fafb;max-width:960px}
-  header{display:flex;align-items:center;padding:16px;background:#000;color:#fff}
-  header img{width:72px;height:72px;border-radius:50%;margin-right:14px}
-  h1{font-size:1.4em;margin:0}
-  #player{width:100%;height:480px;border:0;display:block}
-  h2{font-size:1.1em;margin:24px 0 8px;padding:0 16px;color:#111}
-  #playlists{display:flex;flex-wrap:wrap;gap:12px;padding:0 16px 32px}
-  .pl-item{cursor:pointer;text-align:center;width:220px}
-  .pl-item img{width:100%;border-radius:8px;object-fit:cover;box-shadow:0 2px 6px #0002}
-  .pl-item span{display:block;margin-top:6px;font-size:.85em;color:#111}
-</style>
-<script src="https://apis.google.com/js/api.js" defer></script>
-</head>
-<body>
-
-<header id="yt-header">Loading…</header>
-
-<!-- uploads playlist player -->
-<iframe id="player"
-  src="https://www.youtube.com/embed?listType=user_uploads&list=UUOPBWWtc27ePtGD4dcqIFmA"
-  allowfullscreen></iframe>
-
-<h2>Playlists</h2>
-<div id="playlists"></div>
-
-<script>
-/* === fixed credentials & IDs (already filled in) ========================== */
-const API_KEY   = 'AIzaSyDT7go0eQEFqlAU_bc-xe398xT0I1_CCps';
-const CHANNEL_ID = 'UCOPBWWtc27ePtGD4dcqIFmA';
-
-/* === bootstrap YouTube Data API client ==================================== */
-gapi.load('client', async () => {
-  try {
-    await gapi.client.init({apiKey: API_KEY});
-    buildWidget();
-  } catch (e) {
-    document.body.innerHTML = '<p style="padding:24px;color:red">API error: ' +
-                              (e.result?.error?.message || e.message) + '</p>';
-  }
-});
-
-async function buildWidget() {
-  /* 1️⃣  header (banner/avatar/title/description) */
-  const ch = await gapi.client.youtube.channels.list({
-    part: 'snippet,brandingSettings',
-    id: CHANNEL_ID
-  });
-  const info = ch.result.items[0].snippet;
-  document.getElementById('yt-header').innerHTML = `
-    <img src="${info.thumbnails.default.url}">
-    <div>
-      <h1>${info.title}</h1>
-      <p style="margin:4px 0 0;max-width:620px;font-size:.9em">
-        ${info.description ?? ''}
-      </p>
-    </div>`;
-
-  /* 2️⃣  playlists grid */
-  const pls = await gapi.client.youtube.playlists.list({
-    part: 'snippet',
-    channelId: CHANNEL_ID,
-    maxResults: 50
-  });
-  const wrap = document.getElementById('playlists');
-  pls.result.items.forEach(pl => {
-    const thumb = (pl.snippet.thumbnails.medium || pl.snippet.thumbnails.default).url;
-    const div   = document.createElement('div');
-    div.className = 'pl-item';
-    div.innerHTML = `<img src="${thumb}" alt=""><span>${pl.snippet.title}</span>`;
-    div.onclick = () => {
-      document.getElementById('player').src =
-        `https://www.youtube.com/embed/videoseries?list=${pl.id}`;
-      window.scrollTo({top:0,behavior:'smooth'});
-    };
-    wrap.appendChild(div);
-  });
-}
-</script>
-</body>
 </html>
