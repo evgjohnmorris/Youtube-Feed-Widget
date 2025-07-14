@@ -1,64 +1,60 @@
 <!-- ================================================================
-  YouTube Channel Widget for Notion — v2.2 (Responsive)
-  ----------------------------------------------------------------
-  • Wrapper now stretches fluidly to the embed's full width/height 
-  • Video list switches to 1‑column on narrow blocks (<480 px) and
-    thumbnails scale automatically.
+  YouTube Channel Widget for Notion — v2.3 (Subscribe fallback +
+  robust description toggle & responsive)
 ================================================================ -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <!-- ✦ META -->
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>YouTube Channel Widget for Notion</title>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>YouTube Channel Widget</title>
 
-  <!-- ✦ STYLES -->
+  <!-- ✦ STYLES -------------------------------------------------- -->
   <style>
-    /* ---------- 1. TOKENS (auto dark‑mode) ---------- */
-    :root { --bg:#fff; --card:#fff; --text:#1e1e1e; --muted:#4b5563; --border:#e5e7eb; }
-    body.dark { --bg:#18181b; --card:#1f2937; --text:#f3f4f6; --muted:#9ca3af; --border:#27272a; }
+    /* --1. COLOR TOKENS (auto‑dark) -- */
+    :root{--bg:#fff;--card:#fff;--text:#1e1e1e;--muted:#4b5563;--border:#e5e7eb;--accent:#ea4335}
+    body.dark{--bg:#18181b;--card:#1f2937;--text:#f3f4f6;--muted:#9ca3af;--border:#27272a;--accent:#f87171}
 
-    /* ---------- 2. RESET ---------- */
-    html,body { height:100%; }
-    *{box-sizing:border-box;margin:0;padding:0}
+    /* --2. RESET-- */
+    html,body{height:100%}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     body{font-family:"Inter",system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;justify-content:center}
     a{color:inherit;text-decoration:none}
 
-    /* ---------- 3. WRAPPER (fluid) ---------- */
-    #widget{width:100%;height:100%;border:1px solid var(--border);border-radius:8px;background:var(--card);overflow:hidden;box-shadow:0 4px 10px rgba(0,0,0,.06);display:flex;flex-direction:column}
+    /* --3. WRAPPER-- */
+    #widget{width:100%;height:100%;display:flex;flex-direction:column;border:1px solid var(--border);border-radius:8px;background:var(--card);box-shadow:0 4px 10px rgba(0,0,0,.06);overflow:hidden}
 
-    /* ---------- 4. HEADER ---------- */
+    /* --4. HEADER-- */
     .banner{width:100%;height:22vh;min-height:120px;background-size:cover;background-position:center;position:relative}
     .banner::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,.35)}
     .channel-bar{display:flex;gap:1rem;padding:1rem;background:var(--card);border-bottom:1px solid var(--border)}
-    .channel-thumb{width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid var(--card);flex-shrink:0}
-    .channel-title{font-size:1.25rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
+    .channel-thumb{width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid var(--card)}
+    .channel-title{font-size:1.25rem;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .channel-stats{font-size:.875rem;color:var(--muted)}
     .channel-actions{display:flex;gap:.75rem;margin-top:.5rem;flex-wrap:wrap;align-items:center}
 
-    /* ---------- 5. COLLAPSIBLE DESCRIPTION ---------- */
+    /* --5. DESCRIPTION (toggle) -- */
     details.desc{margin-top:.5rem;font-size:.875rem;color:var(--muted)}
-    details.desc>summary{list-style:none;cursor:pointer;position:relative;padding-right:1.2em}
-    details.desc>summary::-webkit-details-marker{display:none}
-    details.desc>summary::after{content:"▼";position:absolute;right:0;top:0}
+    details.desc>summary{display:flex;align-items:center;gap:.25rem;cursor:pointer;list-style:none}
+    details.desc>summary::after{content:"▼";margin-left:auto}
     details.desc[open]>summary::after{content:"▲"}
-    .desc-preview p{margin:0 0 .75rem;line-height:1.4}
+    .desc-preview{line-height:1.4;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
     details.desc[open] .desc-preview{display:none}
     #channelDescFull p{margin:0 0 .75rem;line-height:1.4}
     details.desc.no-more>summary::after{display:none}
 
-    /* ---------- 6. INLINE PLAYER ---------- */
-    .player-wrap{display:none;position:relative;background:#000;width:100%;aspect-ratio:16/9}
+    /* --6. INLINE PLAYER-- */
+    .player-wrap{display:none;position:relative;width:100%;aspect-ratio:16/9;background:#000}
     .player-wrap.active{display:block}
     .player-wrap iframe{width:100%;height:100%;border:0}
-    .close-btn{position:absolute;top:6px;right:8px;width:28px;height:28px;background:rgba(0,0,0,.5);color:#fff;border:0;border-radius:9999px;font-size:1rem;cursor:pointer}
+    .close-btn{position:absolute;top:6px;right:8px;width:28px;height:28px;border:0;border-radius:9999px;background:rgba(0,0,0,.5);color:#fff;font-size:1rem;cursor:pointer}
 
-    /* ---------- 7. SEARCH ---------- */
+    /* --7. SEARCH -- */
     .search-wrap{display:flex;justify-content:flex-end;padding:.75rem 1rem .5rem}
     .search-input{width:100%;max-width:260px;padding:.4rem .75rem;border:1px solid var(--border);border-radius:.375rem;font-size:.875rem;background:var(--bg);color:var(--text)}
 
-    /* ---------- 8. VIDEO LIST (flex column) ---------- */
+    /* --8. VIDEO LIST-- */
     .videos{flex:1 1 auto;overflow-y:auto;padding:1rem}
     .video-item{display:flex;gap:.75rem;margin-bottom:1rem;cursor:pointer}
     .video-thumb{width:180px;aspect-ratio:16/9;object-fit:cover;border-radius:4px;flex-shrink:0}
@@ -66,19 +62,19 @@
     .video-stats{font-size:.75rem;color:var(--muted);margin-bottom:2px}
     .video-desc{font-size:.875rem;color:var(--muted);line-height:1.3;margin-bottom:.25rem}
     .video-actions{display:flex;gap:.75rem;font-size:.75rem;flex-wrap:wrap}
-    .action-btn{display:inline-flex;align-items:center;gap:4px;background:none;border:0;padding:0;color:var(--muted);cursor:pointer;font:inherit}
-    .action-btn:hover{color:var(--text)}
 
-    /* --- 9. RESPONSIVE BREAKPOINTS --- */
+    /* --9. BUTTONS -- */
+    .action-btn{display:inline-flex;align-items:center;gap:4px;background:none;border:0;padding:0;font:inherit;color:var(--muted);cursor:pointer}
+    .action-btn:hover{color:var(--text)}
+    .primary{color:var(--accent);font-weight:600}
+
+    /* --10. RESPONSIVE -- */
     @media(max-width:480px){
       .channel-bar{flex-direction:column;align-items:flex-start}
       .video-item{flex-direction:column}
       .video-thumb{width:100%}
     }
   </style>
-
-  <!-- Google Subscribe button script -->
-  <script src="https://apis.google.com/js/platform.js" async defer></script>
 </head>
 
 <body>
@@ -88,16 +84,17 @@
 
     <!-- Channel Meta -->
     <div class="channel-bar">
-      <img id="channelThumb" class="channel-thumb" alt="thumb" />
+      <img id="channelThumb" class="channel-thumb" alt="thumb"/>
       <div class="channel-meta">
         <div id="channelTitle" class="channel-title"></div>
         <div id="channelStats" class="channel-stats"></div>
         <div class="channel-actions">
-          <div id="subBtn" class="g-ytsubscribe" data-channelid="" data-layout="default" data-count="default"></div>
-          <button id="shareChannel" class="action-btn"><span>↗</span> Share</button>
+          <!-- Fallback subscribe button -->
+          <a id="subscribeBtn" class="action-btn primary" href="#" target="_blank" rel="noopener">🔔 Subscribe</a>
+          <button id="shareChannel" class="action-btn">↗ Share</button>
         </div>
         <!-- Description -->
-        <details id="channelDesc" class="desc"><summary><div id="descPreview" class="desc-preview"></div></summary><div id="channelDescFull"></div></details>
+        <details id="channelDesc" class="desc"><summary><div class="desc-preview" id="descPreview"></div></summary><div id="channelDescFull"></div></details>
       </div>
     </div>
 
@@ -111,13 +108,15 @@
     <div id="videos" class="videos"></div>
   </div>
 
-  <!-- ✦ SCRIPT (unchanged logic) -->
+  <!-- ✦ SCRIPT -------------------------------------------------- -->
   <script type="module">
-    const API_KEY    = "AIzaSyDT7go0eQEFqlAU_bc-xe398xT0I1_CCps";
-    const CHANNEL_ID = "UCOPBWWtc27ePtGD4dcqIFmA";
+    /* CONFIG */
+    const API_KEY    = "AIzaSyDT7go0eQEFqlAU_bc-xe398xT0I1_CCps";     // replace
+    const CHANNEL_ID = "UCOPBWWtc27ePtGD4dcqIFmA";  // replace
     const MAX_RESULTS=25;
     const CHANNEL_URL=`https://www.youtube.com/channel/${CHANNEL_ID}`;
 
+    /* UTILS */
     const $=s=>document.querySelector(s);
     const fmtNum=n=>Number(n).toLocaleString();
     const fmtDate=iso=>new Date(iso).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
@@ -127,6 +126,7 @@
 
     let allVideos=[];
 
+    /* INIT */
     (async()=>{
       try{
         const ch=(await json(`https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,brandingSettings,contentDetails&id=${CHANNEL_ID}&key=${API_KEY}`)).items[0];
@@ -138,34 +138,25 @@
         const stats=Object.fromEntries(statsResp.items.map(v=>[v.id,v]));
         allVideos=pl.map(it=>{const v=stats[it.contentDetails.videoId]||{};return{id:it.contentDetails.videoId,title:it.snippet.title,desc:it.snippet.description,thumb:it.snippet.thumbnails.medium.url,views:v.statistics?v.statistics.viewCount:0,date:v.snippet?v.snippet.publishedAt:it.contentDetails.videoPublishedAt};});
         paint(allVideos);
-      }catch(e){console.error(e);$('#videos').innerHTML=`<p style='color:#ef4444;padding:1rem'>${e.message}</p>`}
+      }catch(e){console.error(e);$('#videos').innerHTML=`<p style='color:#ef4444;padding:1rem'>${e.message}</p>`;}
     })();
 
-    const paragraphs=(txt,max)=>{const arr=txt.split(/\n+/).filter(p=>p.trim());const slice=max?arr.slice(0,max):arr;return slice.map(p=>`<p>${p}</p>`).join('');};
+    /* RENDER */
+    const paras=(txt)=>txt.split(/\n+/).filter(p=>p.trim());
+    const htmlParas=(arr)=>arr.map(p=>`<p>${p}</p>`).join('');
     function renderHeader(ch){
       $('#channelTitle').textContent=ch.snippet.title;
       $('#channelThumb').src=ch.snippet.thumbnails.high.url;
       $('#channelStats').textContent=`${fmtNum(ch.statistics.subscriberCount)} subscribers • ${fmtNum(ch.statistics.videoCount)} videos • ${fmtNum(ch.statistics.viewCount)} views`;
-      $('#subBtn').setAttribute('data-channelid',CHANNEL_ID);
-      const desc=(ch.snippet.description||'').trim();
-      $('#descPreview').innerHTML=paragraphs(desc,3);
-      $('#channelDescFull').innerHTML=paragraphs(desc.split(/\n+/).slice(3).join('\n'));
-      if(desc.split(/\n+/).length<=3)$('#channelDesc').classList.add('no-more');
+      $('#subscribeBtn').href=`${CHANNEL_URL}?sub_confirmation=1`;
+      const descArr=paras(ch.snippet.description||'');
+      $('#descPreview').innerHTML=htmlParas(descArr.slice(0,3));
+      const remaining=descArr.slice(3);
+      if(remaining.length){$('#channelDescFull').innerHTML=htmlParas(remaining);}else{$('#channelDesc').classList.add('no-more');}
       if(ch.brandingSettings?.image?.bannerExternalUrl)$('#banner').style.backgroundImage=`url(${ch.brandingSettings.image.bannerExternalUrl})`;
     }
     function paint(list){
       const wrap=$('#videos');wrap.innerHTML='';
       list.forEach(v=>{
         const d=document.createElement('div');d.className='video-item';
-        d.innerHTML=`<img loading='lazy' src='${v.thumb}' class='video-thumb' alt='${v.title}'><div class='video-meta'><div class='video-title'>${v.title}</div><div class='video-stats'>${fmtNum(v.views)} views • ${fmtDate(v.date)}</div><div class='video-desc'>${(v.desc||'').slice(0,140)}…</div><div class='video-actions'><a class='action-btn' href='https://www.youtube.com/watch?v=${v.id}' target='_blank' rel='noopener'>👍 Like</a><a class='action-btn' href='https://www.youtube.com/watch?v=${v.id}&lc=1' target='_blank' rel='noopener'>💬 Comment</a><button class='action-btn share-video' data-url='https://youtu.be/${v.id}'>↗ Share</button></div></div>`;
-        d.addEventListener('click',e=>{if(!e.target.closest('.video-actions'))openPlayer(v.id);});
-        wrap.appendChild(d);
-      });
-    }
-    function openPlayer(id){$('#playerFrame').src=`https://www.youtube.com/embed/${id}?autoplay=1`;$('#playerWrap').classList.add('active');$('#playerWrap').scrollIntoView({behavior:'smooth'});}$('#closePlayer').addEventListener('click',()=>{$('#playerFrame').src='';$('#playerWrap').classList.remove('active');});
-    $('#searchInput').addEventListener('input',e=>{const q=e.target.value.toLowerCase();paint(allVideos.filter(v=>v.title.toLowerCase().includes(q)||v.desc.toLowerCase().includes(q)));});
-    $('#shareChannel').addEventListener('click',()=>share(CHANNEL_URL));
-    document.addEventListener('click',e=>{if(e.target.closest('.share-video')){share(e.target.closest('.share-video').dataset.url);e.stopPropagation();}});
-  </script>
-</body>
-</html>
+        d.innerHTML=`<img loading='lazy' src='${v.thumb}' class='video-thumb' alt='${v.title}'><div class='video-meta'><div class='video-title'>${v.title}</div><div class='video-stats'>${fmtNum(v.views)} views • ${fmtDate(v.date)}</div><div class='video-desc'>${(v.desc||'').slice(0,140)}…</div><div class='video-actions'><a class='action
