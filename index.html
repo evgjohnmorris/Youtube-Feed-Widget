@@ -56,14 +56,31 @@
         border-radius: 50%;
         border: 2px solid #ffffff;
         object-fit: cover;
+        flex-shrink: 0;
+      }
+      .channel-meta {
+        flex: 1;
+        min-width: 0;
       }
       .channel-title {
         font-size: 1.25rem;
         font-weight: 600;
+        line-height: 1.3;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .channel-stats {
         font-size: 0.875rem;
         color: #6b7280; /* neutral-500 */
+      }
+      .channel-desc {
+        font-size: 0.875rem;
+        color: #4b5563; /* neutral-600 */
+        margin-top: 0.25rem;
+        line-height: 1.35;
+        max-height: 3.6em; /* ~3 lines */
+        overflow: hidden;
       }
 
       /* ------------------- VIDEO LIST ------------------- */
@@ -84,6 +101,7 @@
       }
       .video-meta {
         flex: 1;
+        min-width: 0;
       }
       .video-title {
         font-weight: 600;
@@ -118,9 +136,10 @@
       <!-- Channel bar -->
       <div class="channel-bar">
         <img id="channelThumb" class="channel-thumb" src="" alt="Channel thumbnail" />
-        <div>
+        <div class="channel-meta">
           <div id="channelTitle" class="channel-title">Channel Name</div>
           <div class="channel-stats" id="channelStats">0 subscribers • 0 videos • 0 views</div>
+          <div class="channel-desc" id="channelDesc">Channel description…</div>
         </div>
       </div>
 
@@ -142,51 +161,48 @@
       /* ------------------------------------------------------
        * CONFIGURATION
        * ---------------------------------------------------- */
-      const API_KEY = "AIzaSyDT7go0eQEFqlAU_bc-xe398xT0I1_CCps"; // 🔑 Replace with your YouTube Data v3 API key
-      const CHANNEL_ID = "UCOPBWWtc27ePtGD4dcqIFmA"; // 📺 Replace with the desired channel ID
+      const API_KEY = "YOUR_API_KEY"; // 🔑 Replace with your YouTube Data v3 API key
+      const CHANNEL_ID = "YOUR_CHANNEL_ID"; // 📺 Replace with the desired channel ID
       const MAX_RESULTS = 25; // Number of latest videos to fetch
 
       /* ------------------------------------------------------
        * HELPER FUNCTIONS
        * ---------------------------------------------------- */
       const $ = (sel) => document.querySelector(sel);
-      const $$ = (sel) => document.querySelectorAll(sel);
-      const fmtNumber = (n) => {
-        return Number(n).toLocaleString();
-      };
+      const fmtNumber = (n) => Number(n).toLocaleString();
 
       /* ------------------------------------------------------
        * FETCH CHANNEL DATA + VIDEOS
        * ---------------------------------------------------- */
       async function fetchJSON(url) {
         const res = await fetch(url);
-        if (!res.ok) throw new Error("Network response was not ok");
+        if (!res.ok) throw new Error(await res.text());
         return res.json();
       }
 
       async function init() {
         try {
-          // --- Get channel details
+          // --- Channel details
           const chUrl =
             `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,brandingSettings,contentDetails&id=${CHANNEL_ID}&key=${API_KEY}`;
           const chData = await fetchJSON(chUrl);
           const ch = chData.items[0];
 
-          // Update header visuals
+          // Header
           $("#channelTitle").textContent = ch.snippet.title;
           $("#channelThumb").src = ch.snippet.thumbnails.high.url;
           $("#channelStats").textContent =
             `${fmtNumber(ch.statistics.subscriberCount)} subscribers • ${fmtNumber(ch.statistics.videoCount)} videos • ${fmtNumber(ch.statistics.viewCount)} views`;
+          $("#channelDesc").textContent = ch.snippet.description || "";
           if (ch.brandingSettings?.image?.bannerExternalUrl) {
             $("#banner").style.backgroundImage = `url(${ch.brandingSettings.image.bannerExternalUrl})`;
           }
 
-          // --- Get latest uploads (uses the uploads playlist)
+          // --- Latest uploads
           const uploadsId = ch.contentDetails.relatedPlaylists.uploads;
           const plUrl =
             `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${uploadsId}&maxResults=${MAX_RESULTS}&key=${API_KEY}`;
           const plData = await fetchJSON(plUrl);
-
           renderVideos(plData.items);
         } catch (err) {
           console.error(err);
@@ -221,14 +237,14 @@
             </a>
             <div class="video-meta">
               <div class="video-title">${v.title}</div>
-              <div class="video-desc">${v.desc?.slice(0, 140) || ""}…</div>
+              <div class="video-desc">${(v.desc || "").slice(0, 140)}…</div>
             </div>
           `;
           container.appendChild(div);
         });
       }
 
-      // --- Simple live search
+      // Live search
       $("#searchInput").addEventListener("input", (e) => {
         const q = e.target.value.toLowerCase();
         const filtered = allVideos.filter((v) =>
@@ -237,7 +253,7 @@
         paint(filtered);
       });
 
-      // Boot up 🚀
+      // 🚀 Start
       init();
     </script>
   </body>
