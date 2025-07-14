@@ -85,7 +85,7 @@
 const API_KEY="AIzaSyDT7go0eQEFqlAU_bc-xe398xT0I1_CCps";
 const CHANNEL_ID="UCOPBWWtc27ePtGD4dcqIFmA";
 const MAX_RESULTS=25;
-const CHANNEL_URL=`https://www.youtube.com/channel/${UCOPBWWtc27ePtGD4dcqIFmA}`;
+const CHANNEL_URL=`https://www.youtube.com/channel/${CHANNEL_ID}`;
 
 /* ——— UTILS ——— */
 const $=s=>document.querySelector(s);
@@ -117,8 +117,8 @@ let allVideos=[];
 })();
 
 /* ——— RENDERERS ——— */
-const paragraphs=t=>t.split(/
-+/).filter(p=>p.trim());
+const paragraphs = txt => txt.split(/
++/).filter(p => p.trim());
 const toHTML=arr=>arr.map(p=>`<p>${p}</p>`).join('');
 function renderHeader(ch){
   $('#channelTitle').textContent=ch.snippet.title;
