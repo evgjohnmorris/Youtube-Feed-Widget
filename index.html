@@ -238,14 +238,22 @@
 
   /* ------------------------------------ 8.5 · Events ----------------- */
   /* (a) About toggle */
-  $("#aboutToggle").addEventListener("click",()=>{
-    const full=$("#aboutFull"),arrow=$("#aboutArrow");
-    const open=full.hidden;
-    full.hidden=false; // reveal to measure
-    if(open) full.hidden=false; else full.hidden=true;
-    arrow.textContent=open?"▲":"▼";
-    $("#aboutPreview").style.display=open?"none":"block";
-  });
+  $("#aboutToggle").addEventListener("click", () => {
+  const full    = $("#aboutFull");
+  const preview = $("#aboutPreview");
+  const arrow   = $("#aboutArrow");
+
+  const isHidden = full.hidden;          // ← current state
+  if (isHidden) {
+    full.hidden = false;                 // show full text
+    preview.style.display = "none";      // hide 3-line preview
+    arrow.textContent = "▲";             // arrow up
+  } else {
+    full.hidden = true;                  // hide full text
+    preview.style.display = "block";     // show 3-line preview
+    arrow.textContent = "▼";             // arrow down
+  }
+});
 
   /* (b) Search */
   $("#searchInput").addEventListener("input",e=>{
