@@ -1,31 +1,26 @@
 <!-- ================================================================
-  YouTube Channel Widget for Notion — v2.3 (Subscribe fallback +
-  robust description toggle & responsive)
+  YouTube Channel Widget for Notion — v2.3.3 (Finished JS)
+  ----------------------------------------------------------------
+  • Completes missing event listeners and closes all tags.
 ================================================================ -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- ✦ META -->
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>YouTube Channel Widget</title>
-
-  <!-- ✦ STYLES -------------------------------------------------- -->
   <style>
-    /* --1. COLOR TOKENS (auto‑dark) -- */
+    /* ——— design tokens ——— */
     :root{--bg:#fff;--card:#fff;--text:#1e1e1e;--muted:#4b5563;--border:#e5e7eb;--accent:#ea4335}
     body.dark{--bg:#18181b;--card:#1f2937;--text:#f3f4f6;--muted:#9ca3af;--border:#27272a;--accent:#f87171}
-
-    /* --2. RESET-- */
+    /* ——— reset ——— */
     html,body{height:100%}
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     body{font-family:"Inter",system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;justify-content:center}
     a{color:inherit;text-decoration:none}
-
-    /* --3. WRAPPER-- */
+    /* ——— wrapper ——— */
     #widget{width:100%;height:100%;display:flex;flex-direction:column;border:1px solid var(--border);border-radius:8px;background:var(--card);box-shadow:0 4px 10px rgba(0,0,0,.06);overflow:hidden}
-
-    /* --4. HEADER-- */
+    /* ——— header ——— */
     .banner{width:100%;height:22vh;min-height:120px;background-size:cover;background-position:center;position:relative}
     .banner::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,.35)}
     .channel-bar{display:flex;gap:1rem;padding:1rem;background:var(--card);border-bottom:1px solid var(--border)}
@@ -33,28 +28,24 @@
     .channel-title{font-size:1.25rem;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .channel-stats{font-size:.875rem;color:var(--muted)}
     .channel-actions{display:flex;gap:.75rem;margin-top:.5rem;flex-wrap:wrap;align-items:center}
-
-    /* --5. DESCRIPTION (toggle) -- */
+    /* ——— description ——— */
     details.desc{margin-top:.5rem;font-size:.875rem;color:var(--muted)}
-    details.desc>summary{display:flex;align-items:center;gap:.25rem;cursor:pointer;list-style:none}
+    details.desc>summary{display:flex;cursor:pointer;list-style:none}
     details.desc>summary::after{content:"▼";margin-left:auto}
     details.desc[open]>summary::after{content:"▲"}
-    .desc-preview{line-height:1.4;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+    .desc-preview{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;line-height:1.4}
     details.desc[open] .desc-preview{display:none}
     #channelDescFull p{margin:0 0 .75rem;line-height:1.4}
     details.desc.no-more>summary::after{display:none}
-
-    /* --6. INLINE PLAYER-- */
+    /* ——— player ——— */
     .player-wrap{display:none;position:relative;width:100%;aspect-ratio:16/9;background:#000}
     .player-wrap.active{display:block}
     .player-wrap iframe{width:100%;height:100%;border:0}
     .close-btn{position:absolute;top:6px;right:8px;width:28px;height:28px;border:0;border-radius:9999px;background:rgba(0,0,0,.5);color:#fff;font-size:1rem;cursor:pointer}
-
-    /* --7. SEARCH -- */
+    /* ——— search ——— */
     .search-wrap{display:flex;justify-content:flex-end;padding:.75rem 1rem .5rem}
     .search-input{width:100%;max-width:260px;padding:.4rem .75rem;border:1px solid var(--border);border-radius:.375rem;font-size:.875rem;background:var(--bg);color:var(--text)}
-
-    /* --8. VIDEO LIST-- */
+    /* ——— list ——— */
     .videos{flex:1 1 auto;overflow-y:auto;padding:1rem}
     .video-item{display:flex;gap:.75rem;margin-bottom:1rem;cursor:pointer}
     .video-thumb{width:180px;aspect-ratio:16/9;object-fit:cover;border-radius:4px;flex-shrink:0}
@@ -62,101 +53,100 @@
     .video-stats{font-size:.75rem;color:var(--muted);margin-bottom:2px}
     .video-desc{font-size:.875rem;color:var(--muted);line-height:1.3;margin-bottom:.25rem}
     .video-actions{display:flex;gap:.75rem;font-size:.75rem;flex-wrap:wrap}
-
-    /* --9. BUTTONS -- */
+    /* ——— buttons ——— */
     .action-btn{display:inline-flex;align-items:center;gap:4px;background:none;border:0;padding:0;font:inherit;color:var(--muted);cursor:pointer}
     .action-btn:hover{color:var(--text)}
     .primary{color:var(--accent);font-weight:600}
-
-    /* --10. RESPONSIVE -- */
-    @media(max-width:480px){
-      .channel-bar{flex-direction:column;align-items:flex-start}
-      .video-item{flex-direction:column}
-      .video-thumb{width:100%}
-    }
+    @media(max-width:480px){.channel-bar{flex-direction:column;align-items:flex-start}.video-item{flex-direction:column}.video-thumb{width:100%}}
   </style>
 </head>
-
 <body>
   <div id="widget">
-    <!-- Banner -->
     <div id="banner" class="banner"></div>
-
-    <!-- Channel Meta -->
     <div class="channel-bar">
-      <img id="channelThumb" class="channel-thumb" alt="thumb"/>
+      <img id="channelThumb" class="channel-thumb" alt="channel"/>
       <div class="channel-meta">
         <div id="channelTitle" class="channel-title"></div>
         <div id="channelStats" class="channel-stats"></div>
         <div class="channel-actions">
-          <!-- Fallback subscribe button -->
-          <a id="subscribeBtn" class="action-btn primary" href="#" target="_blank" rel="noopener">🔔 Subscribe</a>
-          <button id="shareChannel" class="action-btn">↗ Share</button>
+          <a id="subscribeBtn" class="action-btn primary" href="#" target="_blank" rel="noopener">🔔 Subscribe</a>
+          <button id="shareChannel" class="action-btn">↗ Share</button>
         </div>
-        <!-- Description -->
-        <details id="channelDesc" class="desc"><summary><div class="desc-preview" id="descPreview"></div></summary><div id="channelDescFull"></div></details>
+        <details id="channelDesc" class="desc"><summary><div id="descPreview" class="desc-preview"></div></summary><div id="channelDescFull"></div></details>
       </div>
     </div>
-
-    <!-- Player -->
-    <div id="playerWrap" class="player-wrap"><button id="closePlayer" class="close-btn">×</button><iframe id="playerFrame" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen></iframe></div>
-
-    <!-- Search -->
+    <div id="playerWrap" class="player-wrap"><button id="closePlayer" class="close-btn">×</button><iframe id="playerFrame" allow="autoplay;clipboard-write;encrypted-media;picture-in-picture" allowfullscreen></iframe></div>
     <div class="search-wrap"><input id="searchInput" class="search-input" type="search" placeholder="Search videos…"></div>
-
-    <!-- Video List -->
     <div id="videos" class="videos"></div>
   </div>
 
-  <!-- ✦ SCRIPT -------------------------------------------------- -->
-  <script type="module">
-    /* CONFIG */
-    const API_KEY    = "AIzaSyDT7go0eQEFqlAU_bc-xe398xT0I1_CCps";     // replace
-    const CHANNEL_ID = "UCOPBWWtc27ePtGD4dcqIFmA";  // replace
-    const MAX_RESULTS=25;
-    const CHANNEL_URL=`https://www.youtube.com/channel/${CHANNEL_ID}`;
+<script type="module">
+/* ——— CONFIG ——— */
+const API_KEY="AIzaSyDT7go0eQEFqlAU_bc-xe398xT0I1_CCps";
+const CHANNEL_ID="UCOPBWWtc27ePtGD4dcqIFmA";
+const MAX_RESULTS=25;
+const CHANNEL_URL=`https://www.youtube.com/channel/${CHANNEL_ID}`;
 
-    /* UTILS */
-    const $=s=>document.querySelector(s);
-    const fmtNum=n=>Number(n).toLocaleString();
-    const fmtDate=iso=>new Date(iso).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
-    const json=async u=>{const r=await fetch(u);if(!r.ok)throw new Error(await r.text());return r.json();};
-    const share=async url=>{if(navigator.share){try{await navigator.share({url});return;}catch{}}try{await navigator.clipboard.writeText(url);alert('Link copied!');}catch{window.open(url,'_blank');}};
-    if(matchMedia('(prefers-color-scheme: dark)').matches)document.body.classList.add('dark');
+/* ——— UTILS ——— */
+const $=s=>document.querySelector(s);
+const fmtNum=n=>Number(n).toLocaleString();
+const fmtDate=iso=>new Date(iso).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
+const json=async url=>{const r=await fetch(url);if(!r.ok)throw new Error(await r.text());return r.json();};
+const share=async url=>{if(navigator.share){try{await navigator.share({url});return;}catch{}}
+  try{await navigator.clipboard.writeText(url);alert('Link copied!');}catch{window.open(url,'_blank');}};
+if(matchMedia('(prefers-color-scheme: dark)').matches)document.body.classList.add('dark');
 
-    let allVideos=[];
+/* ——— STATE ——— */
+let allVideos=[];
 
-    /* INIT */
-    (async()=>{
-      try{
-        const ch=(await json(`https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,brandingSettings,contentDetails&id=${CHANNEL_ID}&key=${API_KEY}`)).items[0];
-        renderHeader(ch);
-        const uploads=ch.contentDetails.relatedPlaylists.uploads;
-        const pl=(await json(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=${uploads}&maxResults=${MAX_RESULTS}&key=${API_KEY}`)).items;
-        const ids=pl.map(i=>i.contentDetails.videoId).join(',');
-        const statsResp=await json(`https://www.googleapis.com/youtube/v3/videos?part=statistics,snippet&id=${ids}&key=${API_KEY}`);
-        const stats=Object.fromEntries(statsResp.items.map(v=>[v.id,v]));
-        allVideos=pl.map(it=>{const v=stats[it.contentDetails.videoId]||{};return{id:it.contentDetails.videoId,title:it.snippet.title,desc:it.snippet.description,thumb:it.snippet.thumbnails.medium.url,views:v.statistics?v.statistics.viewCount:0,date:v.snippet?v.snippet.publishedAt:it.contentDetails.videoPublishedAt};});
-        paint(allVideos);
-      }catch(e){console.error(e);$('#videos').innerHTML=`<p style='color:#ef4444;padding:1rem'>${e.message}</p>`;}
-    })();
+/* ——— INIT ——— */
+(async()=>{
+  try{
+    const ch=(await json(`https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,brandingSettings,contentDetails&id=${CHANNEL_ID}&key=${API_KEY}`)).items[0];
+    renderHeader(ch);
+    const uploads=ch.contentDetails.relatedPlaylists.uploads;
+    const items=(await json(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=${uploads}&maxResults=${MAX_RESULTS}&key=${API_KEY}`)).items;
+    const ids=items.map(i=>i.contentDetails.videoId).join(',');
+    const stats=Object.fromEntries((await json(`https://www.googleapis.com/youtube/v3/videos?part=statistics,snippet&id=${ids}&key=${API_KEY}`)).items.map(v=>[v.id,v]));
+    allVideos=items.map(it=>{
+      const v=stats[it.contentDetails.videoId]||{};
+      return{ id:it.contentDetails.videoId,title:it.snippet.title,desc:it.snippet.description,thumb:it.snippet.thumbnails.medium.url,views:v.statistics?v.statistics.viewCount:0,date:v.snippet?v.snippet.publishedAt:it.contentDetails.videoPublishedAt };
+    });
+    paint(allVideos);
+  }catch(e){console.error(e);$('#videos').innerHTML=`<p style='color:#ef4444;padding:1rem'>${e.message}</p>`;}
+})();
 
-    /* RENDER */
-    const paras=(txt)=>txt.split(/\n+/).filter(p=>p.trim());
-    const htmlParas=(arr)=>arr.map(p=>`<p>${p}</p>`).join('');
-    function renderHeader(ch){
-      $('#channelTitle').textContent=ch.snippet.title;
-      $('#channelThumb').src=ch.snippet.thumbnails.high.url;
-      $('#channelStats').textContent=`${fmtNum(ch.statistics.subscriberCount)} subscribers • ${fmtNum(ch.statistics.videoCount)} videos • ${fmtNum(ch.statistics.viewCount)} views`;
-      $('#subscribeBtn').href=`${CHANNEL_URL}?sub_confirmation=1`;
-      const descArr=paras(ch.snippet.description||'');
-      $('#descPreview').innerHTML=htmlParas(descArr.slice(0,3));
-      const remaining=descArr.slice(3);
-      if(remaining.length){$('#channelDescFull').innerHTML=htmlParas(remaining);}else{$('#channelDesc').classList.add('no-more');}
-      if(ch.brandingSettings?.image?.bannerExternalUrl)$('#banner').style.backgroundImage=`url(${ch.brandingSettings.image.bannerExternalUrl})`;
-    }
-    function paint(list){
-      const wrap=$('#videos');wrap.innerHTML='';
-      list.forEach(v=>{
-        const d=document.createElement('div');d.className='video-item';
-        d.innerHTML=`<img loading='lazy' src='${v.thumb}' class='video-thumb' alt='${v.title}'><div class='video-meta'><div class='video-title'>${v.title}</div><div class='video-stats'>${fmtNum(v.views)} views • ${fmtDate(v.date)}</div><div class='video-desc'>${(v.desc||'').slice(0,140)}…</div><div class='video-actions'><a class='action
+/* ——— RENDERERS ——— */
+const paragraphs=t=>t.split(/
++/).filter(p=>p.trim());
+const toHTML=arr=>arr.map(p=>`<p>${p}</p>`).join('');
+function renderHeader(ch){
+  $('#channelTitle').textContent=ch.snippet.title;
+  $('#channelThumb').src=ch.snippet.thumbnails.high.url;
+  $('#channelStats').textContent=`${fmtNum(ch.statistics.subscriberCount)} subscribers • ${fmtNum(ch.statistics.videoCount)} videos • ${fmtNum(ch.statistics.viewCount)} views`;
+  $('#subscribeBtn').href=`${CHANNEL_URL}?sub_confirmation=1`;
+  const seg=paragraphs(ch.snippet.description||'');
+  $('#descPreview').innerHTML=toHTML(seg.slice(0,3));
+  const rest=seg.slice(3);
+  if(rest.length)$('#channelDescFull').innerHTML=toHTML(rest);else $('#channelDesc').classList.add('no-more');
+  if(ch.brandingSettings?.image?.bannerExternalUrl)$('#banner').style.backgroundImage=`url(${ch.brandingSettings.image.bannerExternalUrl})`;
+}
+function paint(list){
+  const wrap=$('#videos');wrap.innerHTML='';
+  list.forEach(v=>{
+    const card=document.createElement('div');card.className='video-item';
+    card.innerHTML=`<img loading='lazy' src='${v.thumb}' class='video-thumb' alt='${v.title}'><div class='video-meta'><div class='video-title'>${v.title}</div><div class='video-stats'>${fmtNum(v.views)} views • ${fmtDate(v.date)}</div><div class='video-desc'>${(v.desc||'').slice(0,140)}…</div><div class='video-actions'><a class='action-btn' href='https://www.youtube.com/watch?v=${v.id}' target='_blank' rel='noopener'>👍 Like</a><a class='action-btn' href='https://www.youtube.com/watch?v=${v.id}&lc=1' target='_blank' rel='noopener'>💬 Comment</a><button class='action-btn share-video' data-url='https://youtu.be/${v.id}'>↗ Share</button></div></div>`;
+    card.addEventListener('click',e=>{if(!e.target.closest('.video-actions'))openPlayer(v.id);});
+    wrap.appendChild(card);
+  });
+}
+
+/* ——— EVENTS ——— */
+function openPlayer(id){$('#playerFrame').src=`https://www.youtube.com/embed/${id}?autoplay=1`;$('#playerWrap').classList.add('active');$('#playerWrap').scrollIntoView({behavior:'smooth'});} 
+$('#closePlayer').addEventListener('click',()=>{$('#playerFrame').src='';$('#playerWrap').classList.remove('active');});
+$('#searchInput').addEventListener('input',e=>{const q=e.target.value.toLowerCase();paint(allVideos.filter(v=>v.title.toLowerCase().includes(q)||v.desc.toLowerCase().includes(q)));});
+$('#shareChannel').addEventListener('click',()=>share(CHANNEL_URL));
+document.addEventListener('click',e=>{const btn=e.target.closest('.share-video');if(btn){share(btn.dataset.url);e.stopPropagation();}});
+</script>
+</body>
+</html>
