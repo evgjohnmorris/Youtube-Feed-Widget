@@ -1,6 +1,250 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
+<head>a<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>YouTube Channel Widget for Notion</title>
+    <style>
+      /* ------------------- RESET & LAYOUT ------------------- */
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: "Inter", sans-serif;
+        background: #ffffff;
+        color: #1e1e1e;
+      }
+      a {
+        text-decoration: none;
+        color: inherit;
+      }
+
+      /* ------------------- CONTAINER ------------------- */
+      #widget {
+        max-width: 720px;
+        border: 1px solid #e5e7eb; /* neutral-200 */
+        border-radius: 0.5rem;
+        overflow: hidden;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.06);
+      }
+
+      /* ------------------- HEADER ------------------- */
+      .banner {
+        position: relative;
+        height: 160px;
+        background-size: cover;
+        background-position: center;
+      }
+      .banner::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.35);
+      }
+      .channel-bar {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem;
+        background: #ffffff;
+      }
+      .channel-thumb {
+        width: 72px;
+        height: 72px;
+        border-radius: 50%;
+        border: 2px solid #ffffff;
+        object-fit: cover;
+      }
+      .channel-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+      }
+      .channel-stats {
+        font-size: 0.875rem;
+        color: #6b7280; /* neutral-500 */
+      }
+
+      /* ------------------- VIDEO LIST ------------------- */
+      .videos {
+        padding: 1rem;
+      }
+      .video-item {
+        display: flex;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+      }
+      .video-thumb {
+        width: 180px;
+        aspect-ratio: 16 / 9;
+        object-fit: cover;
+        border-radius: 0.25rem;
+        flex-shrink: 0;
+      }
+      .video-meta {
+        flex: 1;
+      }
+      .video-title {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+        line-height: 1.4;
+      }
+      .video-desc {
+        font-size: 0.875rem;
+        color: #4b5563; /* neutral-600 */
+        line-height: 1.3;
+      }
+
+      /* ------------------- SEARCH ------------------- */
+      .search-wrap {
+        display: flex;
+        justify-content: flex-end;
+        padding: 0 1rem 0.5rem;
+      }
+      .search-input {
+        padding: 0.4rem 0.75rem;
+        border: 1px solid #d1d5db; /* neutral-300 */
+        border-radius: 0.375rem;
+        font-size: 0.875rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="widget">
+      <!-- Banner + Overlay handled in JS -->
+      <div class="banner" id="banner"></div>
+
+      <!-- Channel bar -->
+      <div class="channel-bar">
+        <img id="channelThumb" class="channel-thumb" src="" alt="Channel thumbnail" />
+        <div>
+          <div id="channelTitle" class="channel-title">Channel Name</div>
+          <div class="channel-stats" id="channelStats">0 subscribers • 0 videos • 0 views</div>
+        </div>
+      </div>
+
+      <!-- Search -->
+      <div class="search-wrap">
+        <input
+          type="search"
+          class="search-input"
+          id="searchInput"
+          placeholder="Search videos…"
+        />
+      </div>
+
+      <!-- Videos -->
+      <div class="videos" id="videos"></div>
+    </div>
+
+    <script>
+      /* ------------------------------------------------------
+       * CONFIGURATION
+       * ---------------------------------------------------- */
+      const API_KEY = "AIzaSyDT7go0eQEFqlAU_bc-xe398xT0I1_CCps"; // 🔑 Replace with your YouTube Data v3 API key
+      const CHANNEL_ID = "UCOPBWWtc27ePtGD4dcqIFmA"; // 📺 Replace with the desired channel ID
+      const MAX_RESULTS = 25; // Number of latest videos to fetch
+
+      /* ------------------------------------------------------
+       * HELPER FUNCTIONS
+       * ---------------------------------------------------- */
+      const $ = (sel) => document.querySelector(sel);
+      const $$ = (sel) => document.querySelectorAll(sel);
+      const fmtNumber = (n) => {
+        return Number(n).toLocaleString();
+      };
+
+      /* ------------------------------------------------------
+       * FETCH CHANNEL DATA + VIDEOS
+       * ---------------------------------------------------- */
+      async function fetchJSON(url) {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("Network response was not ok");
+        return res.json();
+      }
+
+      async function init() {
+        try {
+          // --- Get channel details
+          const chUrl =
+            `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,brandingSettings,contentDetails&id=${CHANNEL_ID}&key=${API_KEY}`;
+          const chData = await fetchJSON(chUrl);
+          const ch = chData.items[0];
+
+          // Update header visuals
+          $("#channelTitle").textContent = ch.snippet.title;
+          $("#channelThumb").src = ch.snippet.thumbnails.high.url;
+          $("#channelStats").textContent =
+            `${fmtNumber(ch.statistics.subscriberCount)} subscribers • ${fmtNumber(ch.statistics.videoCount)} videos • ${fmtNumber(ch.statistics.viewCount)} views`;
+          if (ch.brandingSettings?.image?.bannerExternalUrl) {
+            $("#banner").style.backgroundImage = `url(${ch.brandingSettings.image.bannerExternalUrl})`;
+          }
+
+          // --- Get latest uploads (uses the uploads playlist)
+          const uploadsId = ch.contentDetails.relatedPlaylists.uploads;
+          const plUrl =
+            `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${uploadsId}&maxResults=${MAX_RESULTS}&key=${API_KEY}`;
+          const plData = await fetchJSON(plUrl);
+
+          renderVideos(plData.items);
+        } catch (err) {
+          console.error(err);
+          $("#videos").innerHTML = `<p style="color:#ef4444">Error loading channel (${err.message}). Check API key & quota.</p>`;
+        }
+      }
+
+      /* ------------------------------------------------------
+       * RENDER & SEARCH
+       * ---------------------------------------------------- */
+      let allVideos = [];
+
+      function renderVideos(items) {
+        allVideos = items.map((item) => ({
+          id: item.snippet.resourceId.videoId,
+          title: item.snippet.title,
+          desc: item.snippet.description,
+          thumb: item.snippet.thumbnails.medium.url,
+        }));
+        paint(allVideos);
+      }
+
+      function paint(videos) {
+        const container = $("#videos");
+        container.innerHTML = "";
+        videos.forEach((v) => {
+          const div = document.createElement("div");
+          div.className = "video-item";
+          div.innerHTML = `
+            <a href="https://www.youtube.com/watch?v=${v.id}" target="_blank" rel="noopener">
+              <img src="${v.thumb}" class="video-thumb" alt="${v.title}" />
+            </a>
+            <div class="video-meta">
+              <div class="video-title">${v.title}</div>
+              <div class="video-desc">${v.desc?.slice(0, 140) || ""}…</div>
+            </div>
+          `;
+          container.appendChild(div);
+        });
+      }
+
+      // --- Simple live search
+      $("#searchInput").addEventListener("input", (e) => {
+        const q = e.target.value.toLowerCase();
+        const filtered = allVideos.filter((v) =>
+          v.title.toLowerCase().includes(q) || v.desc.toLowerCase().includes(q)
+        );
+        paint(filtered);
+      });
+
+      // Boot up 🚀
+      init();
+    </script>
+  </body>
+</html>
+
 <meta charset="UTF-8">
 <title>Youtube Feed Widget</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
