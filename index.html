@@ -61,8 +61,8 @@
     details.desc{margin-top:.5rem;font-size:.875rem;color:var(--muted)}
     details.desc>summary{list-style:none;cursor:pointer;position:relative;padding-right:1.2em;}
     details.desc>summary::-webkit-details-marker{display:none}
-    details.desc>summary::after{content:"▲";position:absolute;right:0;top:0}
-    details.desc[open]>summary::after{content:"▼"}
+    details.desc>summary::after{content:"▼";position:absolute;right:0;top:0}
+    details.desc[open]>summary::after{content:"▲"}
     .desc-preview{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;line-height:1.35;}
     details.desc[open] .desc-preview{-webkit-line-clamp:unset}
 
