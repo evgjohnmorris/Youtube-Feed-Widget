@@ -74,7 +74,8 @@
     #aboutPreview{padding:0 1rem 1rem;font-size:.875rem;color:var(--c-text)}
     .about-full{padding:0 1rem 1rem;font-size:.875rem;color:var(--c-text)}
     .about-full p{margin-bottom:.75rem;line-height:1.4}
-    .about-full[hidden]{display:none}
+    /* IMPORTANT: do not rely on [hidden]; use inline display instead */
+    .about-full{display:none}
 
     /* 2.4 Search */
     .search{padding:1rem;border-bottom:1px solid var(--c-line);
@@ -129,7 +130,7 @@
     <div id="aboutWrap">
       <button id="aboutToggle" aria-expanded="false" aria-controls="aboutFull">About <span id="aboutArrow">▼</span></button>
       <div id="aboutPreview"></div>
-      <div id="aboutFull" class="about-full" hidden></div>
+      <div id="aboutFull" class="about-full"></div>
     </div>
 
     <!-- 5 · Search -->
@@ -164,10 +165,12 @@
   const fmt = n=> (n==null?"":Number(n).toLocaleString());
 
   /** Escape text for safe HTML injection */
-  const esc = s => String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+  const esc = s => String(s||"").replace(/[&<>\"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
 
   /** Split raw description into non-empty paragraphs */
-  const paragraphs = txt => String(txt||"").split(/\r?\n+/).filter(p=>p.trim());
+  const paragraphs = txt => String(txt||"").split(/
+?
++/).filter(p=>p.trim());
 
   /** Share fallback (navigator.share → clipboard → alert) */
   async function share(url){
@@ -223,7 +226,11 @@
 
       /* — about — */
       const paras = paragraphs(ch.snippet?.description);
-      $("#aboutPreview").innerHTML = esc(paras.slice(0,3).join('\n\n')).replace(/\n\n/g,'<br><br>');
+      $("#aboutPreview").innerHTML = esc(paras.slice(0,3).join('
+
+')).replace(/
+
+/g,'<br><br>');
       $("#aboutFull").innerHTML    = paras.map(p=>`<p>${esc(p)}</p>`).join('');
 
       /* 2️⃣ Video list */
@@ -271,17 +278,25 @@
   }
 
   /* ------------------------------------ 8.5 · Events ----------------- */
-  /* (a) About toggle */
+  /* (a) About toggle — use inline display, not [hidden] */
   $("#aboutToggle").addEventListener("click", () => {
     const full    = $("#aboutFull");
     const preview = $("#aboutPreview");
     const arrow   = $("#aboutArrow");
 
-    const willShow = full.hidden;          // current state → toggling
-    full.hidden = !willShow;
-    preview.style.display = willShow ? "none" : "block";
-    arrow.textContent = willShow ? "▲" : "▼";
-    $("#aboutToggle").setAttribute("aria-expanded", String(willShow));
+    const isOpen = getComputedStyle(full).display !== "none"; // read actual state
+
+    if (isOpen) {
+      full.style.display = "none";       // hide full text
+      preview.style.display = "block";   // show 3-line preview
+      arrow.textContent = "▼";
+      $("#aboutToggle").setAttribute("aria-expanded", "false");
+    } else {
+      full.style.display = "block";      // show full text
+      preview.style.display = "none";    // hide preview
+      arrow.textContent = "▲";
+      $("#aboutToggle").setAttribute("aria-expanded", "true");
+    }
   });
 
   /* (b) Search */
@@ -295,7 +310,7 @@
     const a = e.target.closest("a");
     if(!a) return;
 
-    // Handle Share FIRST (bug fix: share link used to be swallowed by data-stop)
+    // Handle Share FIRST
     if(a.dataset.share){ e.preventDefault(); share(`https://youtu.be/${a.dataset.share}`); return; }
 
     // Only intercept thumbnail clicks that open inline player
