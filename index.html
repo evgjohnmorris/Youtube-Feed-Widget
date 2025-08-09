@@ -1,22 +1,20 @@
 <!--
 ===========================================================================
-  YouTube Channel Widget for Notion ─ v3.1 (fixed)
+  YouTube Channel Widget for Notion ─ v3.2 (stable)
   -------------------------------------------------------------------------
   • Banner + channel bar with Subscribe / Share
-  • 3‑line “About” preview with expandable toggle
+  • 3‑line “About” preview with expandable toggle (robust in Notion)
   • Inline player + close button
-  • Video list with Open / Comment / Share actions
+  • Video list with Open / Comments / Share
   • Search, dark‑mode, lazy‑load thumbnails, fluid layout
   • NO external libraries (just fetch)
-  • API key & channel can be passed via URL hash or query
-  • Resilient to missing channel banner / hidden subs
-  • Entire file ≈ 320 lines, fully annotated for easy maintenance
+  • API key & channel overridable via URL hash/query
+  • Defensive against missing fields / hidden subs
 ===========================================================================
 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- ── 0 · Meta / Title / Fonts ─────────────────────────────────────── -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>YouTube Widget</title>
@@ -24,73 +22,52 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 
-  <!-- ── 1 · Design Tokens & Resets ────────────────────────────────────── -->
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     :root{
-      --c-text:#1e1e1e;      --c-muted:#6b7280;
-      --c-line:#e5e7eb;      --c-bg:#ffffff;
-      --c-accent:#ef4444;    --c-shadow:rgba(0,0,0,.06);
-      --radius:.5rem;        --thumb-w:180px;
+      --c-text:#1e1e1e; --c-muted:#6b7280; --c-line:#e5e7eb; --c-bg:#ffffff;
+      --c-accent:#ef4444; --c-shadow:rgba(0,0,0,.06); --radius:.5rem; --thumb-w:180px;
     }
     @media (prefers-color-scheme:dark){
-      :root{
-        --c-text:#e5e7eb; --c-muted:#9ca3af;
-        --c-line:#374151; --c-bg:#1f2937; --c-shadow:rgba(0,0,0,.4);
-      }
+      :root{ --c-text:#e5e7eb; --c-muted:#9ca3af; --c-line:#374151; --c-bg:#1f2937; --c-shadow:rgba(0,0,0,.4) }
     }
-
     body{font-family:Inter,system-ui,sans-serif;background:var(--c-bg);color:var(--c-text)}
     a{color:inherit;text-decoration:none}
-    button,summary{cursor:pointer;background:none;border:0;color:inherit}
+    button{cursor:pointer;background:none;border:0;color:inherit}
 
-    /* ── 2 · Widget Shell ─────────────────────────────────────────────── */
-    #widget{
-      display:flex;flex-direction:column;max-width:720px;height:100%;
-      border:1px solid var(--c-line);border-radius:var(--radius);
-      overflow:hidden;box-shadow:0 4px 8px var(--c-shadow);
-    }
+    /* Shell */
+    #widget{display:flex;flex-direction:column;max-width:720px;height:100%;border:1px solid var(--c-line);border-radius:var(--radius);overflow:hidden;box-shadow:0 4px 8px var(--c-shadow)}
 
-    /* 2.1 Banner */
-    .banner{height:22vh;min-height:120px;background-size:cover;
-      background-position:center;position:relative}
-    .banner::after{content:"";position:absolute;inset:0;
-      background:rgba(0,0,0,.35)}
+    /* Banner */
+    .banner{height:22vh;min-height:120px;background-size:cover;background-position:center;position:relative}
+    .banner::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,.35)}
 
-    /* 2.2 Channel Bar */
-    .channel-bar{display:flex;align-items:center;gap:1rem;
-      padding:1rem;background:var(--c-bg);border-bottom:1px solid var(--c-line)}
-    .channel-thumb{width:72px;height:72px;border-radius:50%;object-fit:cover;
-      border:2px solid var(--c-bg);background:#111}
+    /* Channel bar */
+    .channel-bar{display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--c-bg);border-bottom:1px solid var(--c-line)}
+    .channel-thumb{width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid var(--c-bg);background:#111}
     .actions{margin-left:auto;display:flex;gap:.5rem}
-    .btn{font-size:.875rem;padding:.35rem .8rem;border:1px solid var(--c-line);
-      border-radius:.375rem;display:inline-flex;align-items:center;gap:.35rem}
+    .btn{font-size:.875rem;padding:.35rem .8rem;border:1px solid var(--c-line);border-radius:.375rem;display:inline-flex;align-items:center;gap:.35rem}
     .btn:hover{background:var(--c-line)}
 
-    /* 2.3 About / Description */
+    /* About */
     #aboutWrap{border-bottom:1px solid var(--c-line);background:var(--c-bg)}
-    #aboutToggle{display:flex;align-items:center;gap:.35rem;
-      font-size:.875rem;padding:.75rem 1rem}
-    #aboutPreview{padding:0 1rem 1rem;font-size:.875rem;color:var(--c-text)}
-    .about-full{padding:0 1rem 1rem;font-size:.875rem;color:var(--c-text)}
+    #aboutToggle{display:flex;align-items:center;gap:.35rem;font-size:.875rem;padding:.75rem 1rem}
+    #aboutPreview{padding:0 1rem 1rem;font-size:.875rem}
+    .about-full{padding:0 1rem 1rem;font-size:.875rem}
     .about-full p{margin-bottom:.75rem;line-height:1.4}
-    /* IMPORTANT: do not rely on [hidden]; use inline display instead */
+    /* Robust: control via inline display, not [hidden] */
     .about-full{display:none}
 
-    /* 2.4 Search */
-    .search{padding:1rem;border-bottom:1px solid var(--c-line);
-      background:var(--c-bg)}
-    .search-input{width:100%;padding:.45rem .75rem;border:1px solid var(--c-line);
-      border-radius:.375rem;font-size:.875rem;background:transparent;color:inherit}
+    /* Search */
+    .search{padding:1rem;border-bottom:1px solid var(--c-line);background:var(--c-bg)}
+    .search-input{width:100%;padding:.45rem .75rem;border:1px solid var(--c-line);border-radius:.375rem;font-size:.875rem;background:transparent;color:inherit}
 
-    /* 2.5 Player */
+    /* Player */
     #playerWrap{position:relative;padding-top:56.25%;display:none}
     #player{position:absolute;inset:0;width:100%;height:100%;border:0}
-    #closePlayer{position:absolute;top:.5rem;right:.5rem;
-      background:rgba(0,0,0,.5);color:#fff;border-radius:9999px;width:32px;height:32px;
-      display:flex;align-items:center;justify-content:center;font-size:1.2rem}
+    #closePlayer{position:absolute;top:.5rem;right:.5rem;background:rgba(0,0,0,.5);color:#fff;border-radius:9999px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:1.2rem}
 
-    /* 2.6 Video List */
+    /* Videos */
     #videos{flex:1;overflow:auto;padding:1rem;background:var(--c-bg)}
     .video{display:flex;gap:.75rem;margin-bottom:1rem}
     .thumb{width:var(--thumb-w);aspect-ratio:16/9;object-fit:cover;border-radius:.25rem}
@@ -98,21 +75,14 @@
     .v-title{font-weight:600;line-height:1.4}
     .v-info{font-size:.75rem;color:var(--c-muted)}
     .v-actions{display:flex;gap:.5rem;flex-wrap:wrap}
-    .v-actions a{font-size:.75rem;border:1px solid transparent;padding:.2rem .4rem;
-      border-radius:.25rem}
+    .v-actions a{font-size:.75rem;border:1px solid transparent;padding:.2rem .4rem;border-radius:.25rem}
     .v-actions a:hover{border-color:var(--c-line)}
 
-    /* 2.7 Responsive tweaks */
-    @media(max-width:479px){
-      .video{flex-direction:column}
-      .thumb{width:100%}
-      .v-actions{margin-top:.25rem}
-    }
+    @media(max-width:479px){.video{flex-direction:column}.thumb{width:100%}.v-actions{margin-top:.25rem}}
   </style>
 </head>
 <body>
   <div id="widget">
-    <!-- 3 · Banner & Channel Bar -->
     <div class="banner" id="banner"></div>
     <div class="channel-bar">
       <img id="channelThumb" class="channel-thumb" alt="Channel avatar" src="" />
@@ -122,109 +92,84 @@
       </div>
       <div class="actions">
         <a id="subBtn" class="btn" target="_blank" rel="noopener noreferrer">🔔 Subscribe</a>
-        <button id="shareChannel" class="btn">↗ Share</button>
+        <button id="shareChannel" class="btn" type="button">↗ Share</button>
       </div>
     </div>
 
-    <!-- 4 · About -->
     <div id="aboutWrap">
-      <button id="aboutToggle" aria-expanded="false" aria-controls="aboutFull">About <span id="aboutArrow">▼</span></button>
+      <button id="aboutToggle" aria-expanded="false" aria-controls="aboutFull" type="button">About <span id="aboutArrow">▼</span></button>
       <div id="aboutPreview"></div>
       <div id="aboutFull" class="about-full"></div>
     </div>
 
-    <!-- 5 · Search -->
     <div class="search">
       <input id="searchInput" class="search-input" placeholder="Search videos…" aria-label="Search videos" />
     </div>
 
-    <!-- 6 · Inline Player -->
     <div id="playerWrap">
       <iframe id="player" allow="autoplay;clipboard-write;encrypted-media;picture-in-picture" referrerpolicy="origin-when-cross-origin" allowfullscreen></iframe>
-      <button id="closePlayer" aria-label="Close player">✕</button>
+      <button id="closePlayer" aria-label="Close player" type="button">✕</button>
     </div>
 
-    <!-- 7 · Video List -->
     <div id="videos"></div>
   </div>
 
-  <!-- ── 8 · Script ───────────────────────────────────────────────────── -->
   <script>
-  /* -------------------------------------------------- 8.1 · Config ---- */
-  // Allow overrides via URL hash or query string (e.g., #key=API_KEY&channel=CHANNEL_ID)
+  /* Config */
   const params = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
-  const API_KEY_DEFAULT    = "AIzaSyDT7go0eQEFqlAU_bc-xe398xT0I1_CCps"; // ← replace for production (or proxy)
-  const CHANNEL_ID_DEFAULT = "UCOPBWWtc27ePtGD4dcqIFmA";                 // ← replace
+  const API_KEY_DEFAULT    = "AIzaSyDT7go0eQEFqlAU_bc-xe398xT0I1_CCps"; // replace for production / proxy
+  const CHANNEL_ID_DEFAULT = "UCOPBWWtc27ePtGD4dcqIFmA";                 // replace
   const API_KEY    = params.get('key')     || API_KEY_DEFAULT;
   const CHANNEL_ID = params.get('channel') || CHANNEL_ID_DEFAULT;
-  const MAX_VIDS   = Math.min(parseInt(params.get('max')||'50',10), 50); // YouTube cap
+  const MAX_VIDS   = Math.min(parseInt(params.get('max')||'50',10), 50);
 
-  /* ------------------------------------------ 8.2 · Utilities --------- */
+  /* Utilities */
   const $  = s=>document.querySelector(s);
   const $$ = s=>document.querySelectorAll(s);
   const fmt = n=> (n==null?"":Number(n).toLocaleString());
-
-  /** Escape text for safe HTML injection */
   const esc = s => String(s||"").replace(/[&<>\"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
-
-  /** Split raw description into non-empty paragraphs */
   const paragraphs = txt => String(txt||"").split(/
 ?
 +/).filter(p=>p.trim());
 
-  /** Share fallback (navigator.share → clipboard → alert) */
   async function share(url){
-    try{
-      if(navigator.share){await navigator.share({url});return}
-      await navigator.clipboard.writeText(url);
-      alert("Link copied!");
-    }catch{prompt("Copy link:",url)}
+    try{ if(navigator.share){await navigator.share({url}); return;} await navigator.clipboard.writeText(url); alert("Link copied!"); }
+    catch{ prompt("Copy link:", url); }
   }
-
-  /** Robust fetch → JSON with readable errors */
   async function fetchJSON(u){
     const r = await fetch(u);
     if(!r.ok){
       let msg = `HTTP ${r.status}`;
-      try{ const j = await r.json(); msg += j.error?.message ? `: ${j.error.message}` : ""; }
-      catch{ msg += " (invalid JSON error)"; }
+      try{ const j = await r.json(); if(j?.error?.message) msg += `: ${j.error.message}`;}catch{}
       throw new Error(msg);
     }
     return r.json();
   }
 
-  /* ------------------------------------ 8.3 · Fetch & Build ---------- */
+  /* Build */
   async function init(){
     try{
-      /* 1️⃣ Channel info */
       const chURL = `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,brandingSettings,contentDetails&id=${CHANNEL_ID}&key=${API_KEY}`;
       const chData = await fetchJSON(chURL);
       const ch = chData.items?.[0];
       if(!ch) throw new Error("Channel not found. Check CHANNEL_ID or API key.");
 
-      /* — visuals — */
+      // Visuals
       $("#channelTitle").textContent = ch.snippet?.title || "Untitled channel";
       const avatar = ch.snippet?.thumbnails?.high?.url || ch.snippet?.thumbnails?.default?.url || "";
       if(avatar) $("#channelThumb").src = avatar;
-
-      // Banner may be missing or protocol-relative; provide gradient fallback
       const rawBanner = ch.brandingSettings?.image?.bannerExternalUrl || "";
-      if(rawBanner){
-        const bannerURL = rawBanner.startsWith("http") ? rawBanner : `https:${rawBanner}`;
-        $("#banner").style.backgroundImage = `url(${bannerURL})`;
-      } else {
-        $("#banner").style.backgroundImage = "linear-gradient(135deg,#111 0%,#4b5563 100%)";
-      }
+      if(rawBanner){ const bannerURL = rawBanner.startsWith("http")? rawBanner : `https:${rawBanner}`; $("#banner").style.backgroundImage = `url(${bannerURL})`; }
+      else { $("#banner").style.backgroundImage = "linear-gradient(135deg,#111 0%,#4b5563 100%)"; }
 
-      // Stats (subscriberCount can be hidden)
+      // Stats
       const subs = ch.statistics?.hiddenSubscriberCount ? "—" : fmt(ch.statistics?.subscriberCount);
       const vids = fmt(ch.statistics?.videoCount);
       const views = fmt(ch.statistics?.viewCount);
-      $("#channelStats").textContent = `${subs || "—"} subs • ${vids || "—"} videos • ${views || "—"} views`;
-
+      $("#channelStats").textContent = `${subs||"—"} subs • ${vids||"—"} videos • ${views||"—"} views`;
       $("#subBtn").href = `https://www.youtube.com/channel/${CHANNEL_ID}?sub_confirmation=1`;
 
-      /* — about — */
+      // About
       const paras = paragraphs(ch.snippet?.description);
       $("#aboutPreview").innerHTML = esc(paras.slice(0,3).join('
 
@@ -233,20 +178,19 @@
 /g,'<br><br>');
       $("#aboutFull").innerHTML    = paras.map(p=>`<p>${esc(p)}</p>`).join('');
 
-      /* 2️⃣ Video list */
+      // Videos
       const playlistId = ch.contentDetails?.relatedPlaylists?.uploads;
       if(!playlistId) throw new Error("Uploads playlist not available for this channel.");
       const plURL = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=${playlistId}&maxResults=${MAX_VIDS}&key=${API_KEY}`;
       const plData = await fetchJSON(plURL);
-      renderVideos(plData.items || []);
-    }
-    catch(e){
+      renderVideos(plData.items||[]);
+    }catch(e){
       console.error(e);
       $("#videos").innerHTML = `<p style="color:var(--c-accent)">Error: ${esc(e.message||'API')}</p>`;
     }
   }
 
-  /* ------------------------------------ 8.4 · Render Videos ---------- */
+  /* Render */
   let videos = [];
   function renderVideos(items){
     videos = items.map(it=>({
@@ -277,59 +221,27 @@
     $("#videos").innerHTML = out || '<p style="color:var(--c-muted)">No videos found.</p>';
   }
 
-  /* ------------------------------------ 8.5 · Events ----------------- */
-  /* (a) About toggle — use inline display, not [hidden] */
+  /* Events */
   $("#aboutToggle").addEventListener("click", () => {
-    const full    = $("#aboutFull");
-    const preview = $("#aboutPreview");
-    const arrow   = $("#aboutArrow");
-
-    const isOpen = getComputedStyle(full).display !== "none"; // read actual state
-
-    if (isOpen) {
-      full.style.display = "none";       // hide full text
-      preview.style.display = "block";   // show 3-line preview
-      arrow.textContent = "▼";
-      $("#aboutToggle").setAttribute("aria-expanded", "false");
-    } else {
-      full.style.display = "block";      // show full text
-      preview.style.display = "none";    // hide preview
-      arrow.textContent = "▲";
-      $("#aboutToggle").setAttribute("aria-expanded", "true");
-    }
+    const full = $("#aboutFull"), preview = $("#aboutPreview"), arrow = $("#aboutArrow");
+    const isOpen = getComputedStyle(full).display !== "none";
+    if (isOpen) { full.style.display = "none"; preview.style.display = "block"; arrow.textContent = "▼"; $("#aboutToggle").setAttribute("aria-expanded","false"); }
+    else { full.style.display = "block"; preview.style.display = "none"; arrow.textContent = "▲"; $("#aboutToggle").setAttribute("aria-expanded","true"); }
   });
 
-  /* (b) Search */
   $("#searchInput").addEventListener("input",e=>{
     const q = e.target.value.toLowerCase();
     paint(videos.filter(v=> v.title.toLowerCase().includes(q) || v.desc.toLowerCase().includes(q)));
   });
 
-  /* (c) Inline player open/close */
   $("#videos").addEventListener("click",e=>{
-    const a = e.target.closest("a");
-    if(!a) return;
-
-    // Handle Share FIRST
+    const a = e.target.closest("a"); if(!a) return;
     if(a.dataset.share){ e.preventDefault(); share(`https://youtu.be/${a.dataset.share}`); return; }
-
-    // Only intercept thumbnail clicks that open inline player
-    if(a.classList.contains('play')){
-      const id = a.dataset.id;
-      $("#player").src = `https://www.youtube.com/embed/${id}?autoplay=1`;
-      $("#playerWrap").style.display = "block";
-      try{ window.scrollTo({top:0,behavior:"smooth"}); }catch{}
-      e.preventDefault();
-    }
+    if(a.classList.contains('play')){ const id=a.dataset.id; $("#player").src = `https://www.youtube.com/embed/${id}?autoplay=1`; $("#playerWrap").style.display = "block"; try{ window.scrollTo({top:0,behavior:"smooth"}); }catch{} e.preventDefault(); }
   });
-  $("#closePlayer").addEventListener("click",()=>{
-    $("#player").src=""; $("#playerWrap").style.display="none";
-  });
-
-  /* (d) Share channel */
+  $("#closePlayer").addEventListener("click",()=>{ $("#player").src=""; $("#playerWrap").style.display="none"; });
   $("#shareChannel").addEventListener("click",()=>share(`https://www.youtube.com/channel/${CHANNEL_ID}`));
 
-  /* ------------------------------------ 8.6 · Kick-off --------------- */
   init();
   </script>
 </body>
