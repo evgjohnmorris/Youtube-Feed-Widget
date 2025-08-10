@@ -1476,7 +1476,7 @@
     videosContainer.className = 'videos-container';
     videosContainer.setAttribute('role', 'list');
     
-    // Fetch accurate view counts for this list
+    // Fetch accurate views and likes for this list
     const detailsMap = new Map();
     try {
       const ids = list.map(v => v.id);
@@ -1484,7 +1484,10 @@
         const detailsURL = `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${ids.join(',')}&key=${API_KEY}`;
         const details = await fetchJSON(detailsURL);
         (details.items || []).forEach(it => {
-          detailsMap.set(it.id, it.statistics?.viewCount);
+          detailsMap.set(it.id, {
+            views: Number(it.statistics?.viewCount),
+            likes: Number(it.statistics?.likeCount)
+          });
         });
       }
     } catch (err) {
@@ -1499,7 +1502,9 @@
       videoEl.style.transform = 'translateY(10px)';
       
       const formattedDate = formatDate(v.date);
-      const viewCount = Number(detailsMap.get(v.id));
+      const stats = detailsMap.get(v.id) || {};
+      const viewCount = Number(stats.views);
+      const likeCountAccurate = Number(stats.likes);
       const formattedViews = (Number.isFinite(viewCount) && viewCount >= 0 ? viewCount.toLocaleString() : '—') + " views";
       
       // YouTube-style "dot" separator for metadata
@@ -1510,11 +1515,10 @@
       const seconds = Math.floor(Math.random() * 59);
       const duration = `${minutes}:${seconds < 10 ? '0' + seconds : seconds}`;
       
-      // Generate random like count
-      const likeCount = Math.floor(Math.random() * 50000) + 100;
-      const formattedLikes = likeCount > 1000 ? 
-        (likeCount / 1000).toFixed(likeCount > 10000 ? 0 : 1) + 'K' : 
-        likeCount.toString();
+      // Use accurate like count from API
+      const formattedLikes = Number.isFinite(likeCountAccurate) ? 
+        (likeCountAccurate >= 1000 ? (likeCountAccurate / 1000).toFixed(likeCountAccurate >= 10000 ? 0 : 1) + 'K' : likeCountAccurate.toString())
+        : '—';
       
       videoEl.innerHTML = `
         <a class="play" data-id="${v.id}" href="#" role="button" aria-label="Play video: ${esc(v.title)}" title="${esc(v.title)}">
@@ -1541,7 +1545,7 @@
                 <path d="M18.77,11h-4.23l1.52-4.94C16.38,5.03,15.54,4,14.38,4c-0.58,0-1.14,0.24-1.52,0.65L7,11v10h10.43 c1.06,0,1.98-0.67,2.19-1.61l1.34-6C21.23,12.15,20.18,11,18.77,11z" fill="currentColor" stroke="none"></path>
                 <rect x="3" y="11" width="4" height="10" fill="currentColor" stroke="none"></rect>
               </svg>
-              <span class="like-count">${formattedLikes}</span>
+              <span class="like-count" data-count="${Number.isFinite(likeCountAccurate) ? likeCountAccurate : 0}">${formattedLikes}</span>
               <span class="icon-tooltip">Like</span>
             </div>
           </div>
@@ -1652,11 +1656,10 @@
       if (likeBtn.classList.contains('active')) {
         // Unlike
         likeBtn.classList.remove('active');
-        let count = parseInt(likeCount.textContent.replace(/[^\d.]/g, ''));
+        let count = Number(likeCount.getAttribute('data-count')) || 0;
         if (count > 0) count--;
-        const formatted = count > 1000 ? 
-          (count / 1000).toFixed(count > 10000 ? 0 : 1) + 'K' : 
-          count.toString();
+        likeCount.setAttribute('data-count', String(count));
+        const formatted = count >= 1000 ? (count / 1000).toFixed(count >= 10000 ? 0 : 1) + 'K' : count.toString();
         likeCount.textContent = formatted;
       } else {
         // Like
@@ -1666,10 +1669,9 @@
           dislikeBtn.classList.remove('active');
         }
         
-        let count = parseInt(likeCount.textContent.replace(/[^\d.]/g, '')) + 1;
-        const formatted = count > 1000 ? 
-          (count / 1000).toFixed(count > 10000 ? 0 : 1) + 'K' : 
-          count.toString();
+        let count = (Number(likeCount.getAttribute('data-count')) || 0) + 1;
+        likeCount.setAttribute('data-count', String(count));
+        const formatted = count >= 1000 ? (count / 1000).toFixed(count >= 10000 ? 0 : 1) + 'K' : count.toString();
         likeCount.textContent = formatted;
         
         // Add a subtle animation
