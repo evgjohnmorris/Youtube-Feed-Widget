@@ -1,15 +1,14 @@
 <!--
 ===========================================================================
-  YouTube Channel Widget for Notion ─ v3.3 (stable)
+  YouTube Channel Widget for Notion ─ v3.5 (stable, Notion-safe)
   -------------------------------------------------------------------------
   • Banner + channel bar with Subscribe / Share
-  • 3‑line “About” preview with expandable toggle (robust in Notion)
+  • 3‑LINE CLAMPED “About” preview + expandable full text
   • Inline player + close button
   • Video list with Open / Comments / Share
   • Search, dark‑mode, lazy‑load thumbnails, fluid layout
   • NO external libraries (just fetch)
   • API key & channel overridable via URL hash/query
-  • Defensive against missing fields / hidden subs
 ===========================================================================
 -->
 <!DOCTYPE html>
@@ -55,7 +54,9 @@
     #aboutPreview{padding:0 1rem 1rem;font-size:.875rem}
     .about-full{padding:0 1rem 1rem;font-size:.875rem}
     .about-full p{margin-bottom:.75rem;line-height:1.4}
-    /* Robust: control via inline display, not [hidden] */
+    /* Use line clamp so preview is exactly 3 lines regardless of paragraphs */
+    .clamp-3{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;line-height:1.4;max-height:4.2em}
+    /* Full text starts hidden; we toggle via inline display styles for Notion */
     .about-full{display:none}
 
     /* Search */
@@ -128,9 +129,6 @@
   const $$ = s=>document.querySelectorAll(s);
   const fmt = n=> (n==null?"":Number(n).toLocaleString());
   const esc = s => String(s||"").replace(/[&<>\"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
-  const paragraphs = txt => String(txt||"").split(/
-?
-+/).filter(p=>p.trim());
 
   async function share(url){
     try{ if(navigator.share){await navigator.share({url}); return;} await navigator.clipboard.writeText(url); alert("Link copied!"); }
@@ -170,13 +168,11 @@
       $("#subBtn").href = `https://www.youtube.com/channel/${CHANNEL_ID}?sub_confirmation=1`;
 
       // About
-      const paras = paragraphs(ch.snippet?.description);
-      $("#aboutPreview").innerHTML = esc(paras.slice(0,3).join('
-
-')).replace(/
-
-/g,'<br><br>');
-      $("#aboutFull").innerHTML    = paras.map(p=>`<p>${esc(p)}</p>`).join('');
+      const descText = String(ch.snippet?.description || "");
+      // FIX: the original had an unterminated string (split('\n') incorrectly as a literal newline), breaking the script.
+      const descHTML = esc(descText).replace(/\r?\n/g,'<br>'); // Notion-safe newlines → <br>
+      $("#aboutPreview").innerHTML = `<div class="clamp-3">${descHTML}</div>`;
+      $("#aboutFull").innerHTML    = `<div>${descHTML}</div>`;
 
       // Videos
       const playlistId = ch.contentDetails?.relatedPlaylists?.uploads;
