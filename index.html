@@ -1,0 +1,2098 @@
+<!--
+===========================================================================
+  YouTube Channel Widget for Notion ─ v3.5 (stable, Notion-safe)
+  -------------------------------------------------------------------------
+  • Banner + channel bar with Subscribe / Share
+  • 3‑LINE CLAMPED “About” preview + expandable full text
+  • Inline player + close button
+  • Video list with Open / Comments / Share
+  • Search, dark‑mode, lazy‑load thumbnails, fluid layout
+  • NO external libraries (just fetch)
+  • API key & channel overridable via URL hash/query
+===========================================================================
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>YouTube Widget</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* Scoped Reset - Only affects elements in this widget */
+    .yt-feed-widget *,
+    .yt-feed-widget *::before,
+    .yt-feed-widget *::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      /* YouTube Light mode colors */
+      --c-text:#0f0f0f; 
+      --c-muted:#606060; 
+      --c-line:#e5e5e5; 
+      --c-bg:#ffffff;
+      --c-bg-secondary:#f9f9f9;
+      --c-accent:#ff0000; /* YouTube Red */
+      --c-accent-hover:#cc0000;
+      --c-accent-light:rgba(255, 0, 0, 0.1);
+      --c-accent-gradient:linear-gradient(135deg, #ff0000 0%, #cc0000 100%);
+      --c-shadow:rgba(0,0,0,.1); 
+      --c-thumb-shadow:rgba(0,0,0,.2);
+      --radius:.25rem; /* YouTube uses very subtle rounding */
+      --radius-lg:.5rem;
+      --radius-full:9999px;
+      --thumb-w:180px;
+      --transition:all 0.15s ease; 
+      --card-shadow:0 1px 3px var(--c-shadow);
+      --card-shadow-hover:0 2px 8px var(--c-shadow);
+      --font-primary:'Roboto', 'YouTube Sans', Arial, sans-serif; /* YouTube uses Roboto/YouTube Sans */
+      --font-weight-normal:400; 
+      --font-weight-medium:500;
+      --font-weight-bold:600;
+      
+      /* Hover states */
+      --hover-bg:#f2f2f2;
+      --hover-dark-bg:#272727;
+      
+      /* UI elements */
+      --glass-bg:#ffffff;
+      --glass-border:var(--c-line);
+      --glass-shadow:0 2px 4px rgba(0, 0, 0, 0.05);
+      --glass-blur:0px; /* YouTube doesn't use glass effects */
+      
+      /* Skeleton colors - light mode */
+      --skeleton-base:#f0f0f0;
+      --skeleton-highlight:rgba(255,255,255,0.8);
+      
+      /* Light mode specific */
+      --scrollbar-thumb:#c7c7c7;
+      --scrollbar-track:#f1f1f1;
+    }
+    
+    @media (prefers-color-scheme:dark){
+      :root{ 
+        /* YouTube Dark mode colors */
+        --c-text:#ffffff; 
+        --c-muted:#aaaaaa; 
+        --c-line:#303030; 
+        --c-bg:#0f0f0f;
+        --c-bg-secondary:#181818;
+        --c-accent:#ff0000; /* YouTube Red */
+        --c-accent-hover:#ff4444; 
+        --c-accent-light:rgba(255, 0, 0, 0.2);
+        --c-accent-gradient:linear-gradient(135deg, #ff4444 0%, #ff0000 100%);
+        --c-shadow:rgba(0,0,0,.4);
+        --c-thumb-shadow:rgba(0,0,0,.5);
+        
+        /* UI elements - dark mode */
+        --glass-bg:#212121;
+        --glass-border:#303030;
+        --glass-shadow:0 2px 4px rgba(0, 0, 0, 0.2);
+        --hover-bg:#272727;
+        
+        /* Skeleton colors - dark mode */
+        --skeleton-base:#272727;
+        --skeleton-highlight:rgba(60, 60, 60, 0.8);
+        
+        /* Dark mode specific */
+        --scrollbar-thumb:#606060;
+        --scrollbar-track:#181818;
+      }
+    }
+    
+    /* Accessibility */
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+    
+    /* Custom scrollbar - Scoped to widget only */
+    .yt-feed-widget ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    
+    .yt-feed-widget ::-webkit-scrollbar-track {
+      background: var(--scrollbar-track);
+    }
+    
+    .yt-feed-widget ::-webkit-scrollbar-thumb {
+      background: var(--scrollbar-thumb);
+      border-radius: 4px;
+    }
+    
+    .yt-feed-widget ::-webkit-scrollbar-thumb:hover {
+      background: var(--c-accent);
+    }
+    /* When used as full page */
+    body.yt-feed-body{
+      font-family:var(--font-primary);
+      background:linear-gradient(135deg, var(--c-bg) 0%, var(--c-bg-secondary) 100%);
+      color:var(--c-text);
+      line-height:1.5;
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:2rem;
+      overflow-x:hidden;
+    }
+    
+    /* Widget container styling regardless of embedding */
+    .yt-feed-widget {
+      font-family:var(--font-primary);
+      color:var(--c-text);
+      line-height:1.5;
+      width:100%;
+      height:100%;
+      overflow: hidden; /* Prevent any overflow outside the widget container */
+      display: flex;
+      flex-direction: column;
+    }
+    a{
+      color:inherit;
+      text-decoration:none;
+      transition:var(--transition);
+      position:relative;
+    }
+    button{
+      cursor:pointer;
+      background:none;
+      border:0;
+      color:inherit;
+      transition:var(--transition);
+      font-family:var(--font-primary);
+    }
+    
+    /* Selection styling - Scoped to widget */
+    .yt-feed-widget ::selection {
+      background:var(--c-accent-light);
+      color:var(--c-accent);
+    }
+
+    /* Shell - YouTube style */
+    #widget{
+      display: flex;
+      flex-direction: column;
+      width: 100%; /* Always take full width of container */
+      max-width: 1280px; /* YouTube's exact width */
+      height: 100%;
+      border: none;
+      border-radius: 0;
+      overflow: hidden;
+      box-shadow: none;
+      background: var(--c-bg);
+      margin: 0 auto; /* Center if smaller than container */
+    }
+    
+    /* Notification popup styling */
+    .notification-popup {
+      background: var(--c-bg);
+      border: 1px solid var(--c-line);
+      border-radius: var(--radius);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      z-index: 1000;
+      animation: fadeIn 0.2s ease;
+      width: 200px;
+      position: absolute;
+      top: 45px; /* Position below the button */
+      right: 10px;
+    }
+    
+    .notification-options {
+      padding: 8px 0;
+    }
+    
+    .notification-option {
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: var(--transition);
+    }
+    
+    .notification-option:hover {
+      background: var(--hover-bg);
+    }
+    
+    /* Toast notification */
+    .toast-notification {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.8);
+      color: white;
+      padding: 8px 16px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      opacity: 1;
+      transition: opacity 0.3s ease;
+      z-index: 2000; /* Higher z-index to be above all elements */
+    }
+
+    /* YouTube-style channel header */
+    .banner{
+      height: 88px; /* YouTube's exact banner height */
+      min-height: 88px;
+      background-size: cover;
+      background-position: center;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .banner::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.05); /* YouTube's subtle overlay */
+      z-index: 1;
+    }
+    
+    .banner-content {
+      display: none; /* YouTube doesn't show text on the banner */
+    }
+    
+    /* Channel bar - YouTube style */
+    .channel-bar{
+      position: relative;
+      z-index: 2;
+      margin-top: -40px; /* YouTube overlaps the avatar with the banner */
+      padding: 0 16px 0 136px; /* Space for avatar - YouTube's exact spacing */
+      height: 116px; /* YouTube's exact height */
+      display: flex;
+      align-items: flex-end;
+      background: transparent;
+      border-bottom: none;
+    }
+    
+    .channel-thumb{
+      position: absolute;
+      left: 24px; /* YouTube's exact spacing */
+      top: -42px; /* YouTube's exact positioning */
+      width: 80px; /* YouTube's exact size */
+      height: 80px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: none;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      background: var(--c-bg);
+    }
+    
+    /* YouTube-style header info layout */
+    .banner-header-info {
+      padding: 16px 0 24px; /* YouTube's exact padding */
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    
+    .channel-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .channel-header-text {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* YouTube style subscribe button row */
+    .channel-actions {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    /* Already defined above with YouTube style positioning */
+    /* YouTube-style buttons */
+    .actions {
+      display: flex;
+      gap: 8px; /* YouTube's exact spacing */
+    }
+    .btn {
+      font-size: 14px; /* YouTube's exact font size */
+      padding: 0 16px; /* YouTube's exact padding */
+      border-radius: 18px; /* YouTube now uses rounded buttons */
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px; /* YouTube's exact spacing */
+      font-weight: 500;
+      transition: var(--transition);
+      text-transform: uppercase; /* YouTube buttons are uppercase */
+      letter-spacing: 0.007px; /* YouTube's exact letter spacing */
+      min-width: 0;
+      height: 36px;
+    }
+    .btn-primary {
+      background: var(--c-bg);
+      color: var(--c-text);
+      border: 1px solid var(--c-line); /* YouTube now uses outlined buttons */
+      box-shadow: none;
+    }
+    .btn-primary:hover {
+      background: rgba(0,0,0,0.05);
+      transform: none;
+      box-shadow: none;
+    }
+    .btn-primary:focus {
+      outline: none;
+      background: rgba(0,0,0,0.1);
+    }
+    /* Subscribe button is special - it's filled */
+    #subBtn {
+      background: var(--c-text);
+      color: rgb(0, 0, 0);
+      border: none;
+      padding: 0 16px;
+    }
+    #subBtn:hover {
+      background: #272727;
+      color: white;
+    }
+    .btn-secondary {
+      width: 36px;
+      min-width: 36px;
+      padding: 0;
+      border: none;
+      background: transparent;
+      color: var(--c-text);
+    }
+    .btn-secondary:hover {
+      background: rgba(0,0,0,0.05);
+      color: var(--c-text);
+      transform: none;
+    }
+    .btn-secondary.active {
+      color: var(--c-accent);
+    }
+    .btn-secondary svg {
+      width: 24px;
+      height: 24px;
+    }
+
+    /* About section - YouTube style */
+    #aboutWrap{
+      border-bottom: 1px solid var(--c-line);
+      background: var(--c-bg);
+      transition: var(--transition);
+      padding: 0 16px;
+    }
+    #aboutToggle{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      font-size: 0.85rem;
+      padding: 0.75rem 0;
+      color: var(--c-text);
+      font-weight: var(--font-weight-medium);
+      border-bottom: 1px solid var(--c-line);
+      margin-bottom: 0.75rem;
+    }
+    #aboutToggle:hover{
+      color: var(--c-accent);
+    }
+    #aboutToggle .toggle-text{
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 1rem;
+      font-weight: 500;
+    }
+    #aboutArrow{
+      transition: transform 0.3s ease;
+      opacity: 0.7;
+      font-size: 0.75rem;
+      height: 20px;
+      width: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #aboutToggle:hover #aboutArrow{
+      opacity: 1;
+    }
+    #aboutPreview{
+      padding: 0.5rem 0 1rem 0;
+      font-size: 0.875rem;
+      color: var(--c-muted);
+      line-height: 1.5;
+    }
+    .about-full{
+      padding: 0.5rem 0 1rem 0;
+      font-size: 0.875rem;
+      color: var(--c-muted);
+      line-height: 1.5;
+      animation: fadeIn 0.3s ease;
+    }
+    .about-full p{
+      margin-bottom: 0.75rem;
+    }
+    /* Use line clamp so preview is exactly 2 lines like YouTube */
+    .clamp-3{
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
+      line-height: 1.5;
+      max-height: 3em;
+    }
+    /* Full text starts hidden; we toggle via inline display styles */
+    .about-full{display:none}
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Search - YouTube style */
+    .search{
+      padding: 0 16px 12px;
+      border-bottom: none;
+      background: var(--c-bg);
+      position: relative;
+    }
+    .search-input{
+      width: 100%;
+      padding: 0.5rem 2.5rem 0.5rem 1rem; /* Search icon on right like YouTube */
+      border: 1px solid var(--c-line);
+      border-radius: 2px; /* YouTube search has minimal border radius */
+      font-size: 0.875rem;
+      background: var(--c-bg);
+      color: inherit;
+      transition: var(--transition);
+    }
+    .search-input:focus{
+      outline: none;
+      border-color: #1c62b9; /* YouTube's focused input color */
+      box-shadow: 0 0 0 1px #1c62b9;
+    }
+    .search-input::placeholder{
+      color: var(--c-muted);
+      opacity: 0.7;
+    }
+    .search::after { /* YouTube has search icon on the right */
+      content: '';
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      right: 26px;
+      top: 50%;
+      transform: translateY(-50%);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23606060' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'%3E%3C/circle%3E%3Cpath d='m21 21-4.3-4.3'%3E%3C/path%3E%3C/svg%3E");
+      background-size: contain;
+      pointer-events: none;
+    }
+
+    /* Player - YouTube style */
+    #playerWrap {
+      position: relative;
+      padding-top: 56.25%; /* 16:9 aspect ratio */
+      display: none;
+      border-bottom: none;
+      box-shadow: none; /* YouTube player doesn't have shadows */
+      animation: fadeIn 0.3s ease;
+    }
+    #player {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      border-radius: 0;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      z-index: 0;
+    }
+    /* YouTube style close button (X in corner) */
+    #closePlayer {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(0,0,0,.6);
+      color: white;
+      border-radius: 2px;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      transition: var(--transition);
+      opacity: 0;
+      z-index: 10;
+    }
+    #playerWrap:hover #closePlayer {
+      opacity: 1;
+    }
+    #closePlayer:hover {
+      background: rgba(0,0,0,.8);
+      transform: none;
+    }
+    #playerLoading {
+      transition: opacity 0.3s ease;
+    }
+
+    /* Videos - YouTube style */
+    #videos{
+      flex:1;
+      overflow-y:auto; /* Vertical scrolling */
+      overflow-x:hidden; /* No horizontal scrolling */
+      padding:24px 16px; /* YouTube's exact padding */
+      background:var(--c-bg);
+      position:relative;
+      -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+    }
+    .videos-container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px; /* YouTube's exact spacing */
+      max-width: 862px; /* YouTube's exact width */
+      margin: 0 auto;
+    }
+    .video{
+      display:flex;
+      gap:16px; /* YouTube's exact spacing */
+      padding:0;
+      border-radius:0;
+      transition:var(--transition);
+      position:relative;
+      background:transparent;
+      border:none;
+      box-shadow:none;
+    }
+    .video:hover{
+      background:transparent; /* YouTube doesn't change background on hover */
+      transform:none;
+      box-shadow:none;
+      border-color:transparent;
+    }
+    .thumb-container{
+      position:relative;
+      overflow:hidden;
+      border-radius:8px; /* YouTube's exact border radius */
+      box-shadow:none;
+      transition:var(--transition);
+      width:360px; /* YouTube's exact width */
+      height:202px; /* YouTube's exact height */
+      flex-shrink: 0;
+    }
+    .thumb{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      transition:none;
+    }
+    .play:hover .thumb{
+      transform:none;
+    }
+    /* YouTube-style video duration badge */
+    .video-duration {
+      position: absolute;
+      bottom: 8px;
+      right: 8px;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 3px 4px;
+      border-radius: 2px;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 12px;
+    }
+    /* YouTube hover overlay */
+    .thumb-container::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-color: rgba(0, 0, 0, 0.1);
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+    .play:hover .thumb-container::after {
+      opacity: 1;
+    }
+    /* YouTube-style play button (only appears on hover) */
+    .play-icon{
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%,-50%);
+      width: 68px;
+      height: 48px;
+      background-color: rgba(0, 0, 0, 0.6);
+      border-radius: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: var(--transition);
+      pointer-events: none;
+    }
+    .play-icon:after{
+      content: "";
+      width: 0;
+      height: 0;
+      border-top: 10px solid transparent;
+      border-left: 18px solid white;
+      border-bottom: 10px solid transparent;
+      margin-left: 4px;
+    }
+    .play:hover .play-icon{
+      opacity: 1;
+      transform: translate(-50%,-50%);
+    }
+    /* YouTube-style video metadata */
+    .meta{
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      gap:4px; /* YouTube's exact spacing */
+      max-width: 470px; /* YouTube's exact width */
+      padding-top: 5px; /* YouTube's exact spacing */
+    }
+    .v-title{
+      font-weight: 500; /* YouTube titles are medium weight */
+      line-height: 1.4;
+      font-size: 16px; /* YouTube's exact size */
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      margin-bottom: 4px;
+      color: var(--c-text);
+    }
+    .v-info{
+      font-size: 14px; /* YouTube's exact size */
+      color: var(--c-muted);
+      display: flex;
+      align-items: center;
+    }
+    /* Channel info row (YouTube-style) */
+    .channel-info-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0;
+      font-size: 14px; /* YouTube's exact size */
+      color: var(--c-muted);
+    }
+    .channel-dot {
+      display: inline-block;
+      width: 2px;
+      height: 2px;
+      background-color: var(--c-muted);
+      border-radius: 50%;
+      margin: 0 4px; /* YouTube's exact spacing */
+    }
+    /* YouTube-style engagement metrics - updated to match current UI */
+    .video-metrics {
+      display: flex;
+      align-items: center;
+      margin-top: 8px;
+      gap: 8px;
+    }
+    .metric {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--c-text);
+      font-size: 14px;
+      font-weight: 500;
+      background-color: rgba(0,0,0,0.05);
+      border-radius: 18px;
+      padding: 6px 12px;
+      height: 36px;
+    }
+    .metric svg {
+      width: 24px;
+      height: 24px;
+    }
+    .metric-likes {
+      cursor: pointer;
+      position: relative;
+    }
+    .metric-likes:hover {
+      background-color: rgba(0,0,0,0.1);
+    }
+    .metric-likes:hover svg {
+      color: #065fd4; /* YouTube blue hover */
+    }
+    .metric-likes.active {
+      color: #065fd4; /* YouTube blue */
+    }
+    .metric-likes.active svg {
+      fill: #065fd4; /* YouTube blue */
+      color: #065fd4; /* YouTube blue */
+      opacity: 1;
+    }
+    /* Dislike button */
+    .metric-dislikes {
+      cursor: pointer;
+      padding: 6px 12px;
+      border-radius: 18px;
+      background-color: rgba(0,0,0,0.05);
+    }
+    .metric-dislikes:hover {
+      background-color: rgba(0,0,0,0.1);
+    }
+    .metric-dislikes:hover svg {
+      color: #065fd4; /* YouTube blue hover */
+    }
+    .metric-dislikes.active {
+      color: #065fd4; /* YouTube blue */
+    }
+    .metric-dislikes.active svg {
+      fill: #065fd4; /* YouTube blue */
+      color: #065fd4; /* YouTube blue */
+      opacity: 1;
+    }
+    /* Tooltip for icons */
+    .tooltip-trigger {
+      position: relative;
+    }
+    .icon-tooltip {
+      position: absolute;
+      bottom: -30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(0,0,0,0.8);
+      color: white;
+      padding: 6px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      white-space: nowrap;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.2s ease, visibility 0.2s ease;
+      z-index: 100;
+    }
+    .tooltip-trigger:hover .icon-tooltip {
+      opacity: 1;
+      visibility: visible;
+    }
+    /* YouTube-style action buttons - updated to match current UI */
+    .v-actions{
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .v-actions a{
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      min-width: 40px;
+      height: 36px;
+      padding: 0 16px;
+      border-radius: 18px;
+      background: rgba(0,0,0,0.05);
+      border: none;
+      transition: var(--transition);
+      color: var(--c-text);
+      font-weight: 500;
+    }
+    .v-actions a svg {
+      width: 24px;
+      height: 24px;
+      margin-right: 8px;
+    }
+    .v-actions a:hover{
+      background: rgba(0,0,0,0.1);
+      color: var(--c-text);
+      transform: none;
+      box-shadow: none;
+    }
+    .v-actions a:hover svg {
+      color: #065fd4; /* YouTube blue hover */
+    }
+    /* Circular button variant */
+    .v-actions a.btn-circle {
+      width: 36px;
+      padding: 0;
+    }
+    .v-actions a.btn-circle svg {
+      margin-right: 0;
+    }
+    /* Active state for save button */
+    .v-actions a.active svg {
+      fill: #065fd4;
+      color: #065fd4;
+    }
+
+    /* Responsive design */
+        /* YouTube responsive design */
+    @media(max-width:1024px){
+      #widget {
+        max-width: 100%;
+      }
+      .videos-container {
+        max-width: 100%;
+      }
+    }
+    
+    @media(max-width:768px){
+      body.yt-feed-body {
+        padding: 0;
+      }
+      .yt-feed-embed #widget,
+      .yt-feed-widget #widget {
+        max-width: 100%;
+        width: 100%;
+        border-radius: 0;
+      }
+      body.yt-feed-body #widget{
+        max-width: 100%;
+        width: 100%;
+        height: 100vh;
+        border-radius: 0;
+      }
+      .banner-header-info {
+        padding: 12px 0 16px;
+      }
+      .channel-bar {
+        padding: 0 12px 0 104px;
+        height: 96px;
+      }
+      .channel-thumb {
+        left: 16px;
+        width: 72px;
+        height: 72px;
+      }
+    }
+
+    @media(max-width:640px){
+      .video {
+        flex-direction: column;
+        gap: 12px;
+      }
+      .thumb-container {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 16/9;
+      }
+      .meta {
+        max-width: 100%;
+      }
+      .channel-bar {
+        flex-wrap: wrap;
+        gap: 12px;
+        padding: 0 12px 12px 12px;
+        margin-top: 0;
+        height: auto;
+      }
+      .channel-thumb {
+        position: relative;
+        top: -36px;
+        left: 0;
+        margin-bottom: -36px;
+      }
+      .banner-header-info {
+        padding: 0;
+      }
+      .actions {
+        width: 100%;
+        justify-content: flex-end;
+        margin-top: 12px;
+      }
+      #aboutToggle {
+        padding: 12px;
+      }
+      .search {
+        padding: 12px;
+      }
+    }
+
+    @media(max-width:480px){
+      .banner {
+        height: 56px;
+        min-height: 56px;
+      }
+      #videos {
+        padding: 16px 12px;
+      }
+      .video {
+        margin-bottom: 16px;
+      }
+      .v-actions {
+        justify-content: space-between;
+      }
+    }
+    
+    /* Active video styling - YouTube style */
+    .active-video {
+      background: rgba(0,0,0,0.05);
+      border-left: none;
+      box-shadow: none;
+      transform: none;
+    }
+    .active-video .thumb-container::after {
+      opacity: 1;
+    }
+    
+    /* Player active state - YouTube style */
+    .player-active #playerWrap {
+      box-shadow: none;
+    }
+    
+    /* Widget animation - YouTube style (subtle) */
+    .widget-animate-in {
+      animation: widget-appear 0.3s ease-out;
+    }
+    
+    @keyframes widget-appear {
+      0% {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    /* Interactive effects and micro-interactions - YouTube style */
+    .btn svg,
+    .v-actions a svg {
+      transition: transform 0.2s ease;
+    }
+    
+    .btn:hover svg,
+    .v-actions a:hover svg {
+      transform: scale(1.1);
+    }
+    
+    /* Pulse animation for active elements - YouTube style */
+    @keyframes pulse {
+      0% { background-color: rgba(0, 0, 0, 0.05); }
+      50% { background-color: rgba(0, 0, 0, 0.1); }
+      100% { background-color: rgba(0, 0, 0, 0.05); }
+    }
+    
+    .btn-primary:focus {
+      outline: none;
+      background: rgba(0, 0, 0, 0.1);
+    }
+    
+    .pulse-highlight {
+      animation: pulse 0.5s;
+    }
+    
+    /* Loading animations */
+    @keyframes shimmerBg {
+      0% { background-position: -468px 0 }
+      100% { background-position: 468px 0 }
+    }
+    
+    .video {
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .video::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 50%;
+      height: 100%;
+      background: linear-gradient(
+        90deg, 
+        transparent, 
+        rgba(255, 255, 255, 0.2), 
+        transparent
+      );
+      transform: skewX(-25deg);
+      transition: 0.75s;
+      opacity: 0;
+    }
+    
+    .video:hover::after {
+      left: 150%;
+      opacity: 1;
+    }
+    
+    /* Custom tooltip - YouTube style */
+    .custom-tooltip {
+      position: absolute;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 8px 12px;
+      border-radius: 2px;
+      font-size: 12px;
+      line-height: 1.4;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      z-index: 1000;
+      max-width: 200px;
+      text-align: center;
+    }
+    
+    .custom-tooltip::after {
+      display: none; /* YouTube tooltips don't have arrows */
+    }
+    
+    .custom-tooltip.visible {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body class="yt-feed-body">
+  <div class="yt-feed-widget">
+    <div id="widget" role="region" aria-label="YouTube Channel Widget" class="widget-animate-in">
+        <!-- YouTube-style header -->
+    <header>
+      <!-- Banner -->
+      <div class="banner" id="banner" role="img" aria-label="Channel banner"></div>
+      
+      <!-- YouTube-style channel header layout -->
+      <div class="channel-bar">
+        <!-- Channel avatar -->
+        <img id="channelThumb" class="channel-thumb" alt="Channel avatar" src="" />
+        
+        <!-- Channel info section -->
+        <div class="banner-header-info">
+          <div class="channel-header-row">
+            <div class="channel-header-text">
+              <h1 id="channelTitle" style="font-weight:500;font-size:1.25rem;margin:0">Loading…</h1>
+              <div id="channelStats" style="font-size:0.8125rem;color:var(--c-muted);margin-top:2px" aria-live="polite"></div>
+            </div>
+            
+            <!-- Subscription buttons -->
+            <div class="actions">
+              <a id="subBtn" class="btn btn-primary" target="_blank" rel="noopener noreferrer" aria-label="Subscribe to channel">
+                SUBSCRIBE
+              </a>
+              <button id="shareChannel" class="btn btn-secondary" type="button" aria-label="Share channel">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                  <polyline points="16 6 12 2 8 6"></polyline>
+                  <line x1="12" y1="2" x2="12" y2="15"></line>
+                </svg>
+              </button>
+              <button id="notificationBtn" class="btn btn-secondary" type="button" aria-label="Turn on notifications">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div id="aboutWrap">
+      <button id="aboutToggle" aria-expanded="false" aria-controls="aboutFull" type="button">
+        <span class="toggle-text">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+          About Channel
+        </span>
+        <span id="aboutArrow" aria-hidden="true">▼</span>
+      </button>
+      <div id="aboutPreview" aria-live="polite"></div>
+      <div id="aboutFull" class="about-full" aria-hidden="true"></div>
+    </div>
+
+    <div class="search">
+      <label for="searchInput" class="sr-only">Search videos</label>
+      <input id="searchInput" class="search-input" placeholder="Search videos…" aria-label="Search videos" type="search" />
+    </div>
+
+    <div id="playerWrap" role="region" aria-label="Video player" tabindex="-1">
+      <iframe id="player" allow="autoplay;clipboard-write;encrypted-media;picture-in-picture" referrerpolicy="origin-when-cross-origin" allowfullscreen title="YouTube video player"></iframe>
+      <button id="closePlayer" aria-label="Close player" type="button">✕</button>
+    </div>
+
+    <div id="videos">
+      <div id="loadingIndicator">
+        <!-- Skeleton loading UI -->
+        <div class="skeleton-container">
+          <div class="skeleton-video">
+            <div class="skeleton-thumbnail"></div>
+            <div class="skeleton-meta">
+              <div class="skeleton-title"></div>
+              <div class="skeleton-info"></div>
+              <div class="skeleton-actions">
+                <div class="skeleton-button"></div>
+                <div class="skeleton-button"></div>
+                <div class="skeleton-button"></div>
+              </div>
+            </div>
+          </div>
+          <div class="skeleton-video">
+            <div class="skeleton-thumbnail"></div>
+            <div class="skeleton-meta">
+              <div class="skeleton-title"></div>
+              <div class="skeleton-info"></div>
+              <div class="skeleton-actions">
+                <div class="skeleton-button"></div>
+                <div class="skeleton-button"></div>
+                <div class="skeleton-button"></div>
+              </div>
+            </div>
+          </div>
+          <div class="skeleton-video">
+            <div class="skeleton-thumbnail"></div>
+            <div class="skeleton-meta">
+              <div class="skeleton-title"></div>
+              <div class="skeleton-info"></div>
+              <div class="skeleton-actions">
+                <div class="skeleton-button"></div>
+                <div class="skeleton-button"></div>
+                <div class="skeleton-button"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <style>
+      /* Skeleton Loading */
+      @keyframes shimmer {
+        0% { background-position: -468px 0 }
+        100% { background-position: 468px 0 }
+      }
+      
+      .skeleton-container {
+        padding: 1.5rem;
+      }
+      
+      .skeleton-video {
+        display: flex;
+        gap: 1.25rem;
+        margin-bottom: 1.5rem;
+      }
+      
+      .skeleton-thumbnail {
+        width: var(--thumb-w);
+        aspect-ratio: 16/9;
+        border-radius: .5rem;
+        background: var(--skeleton-base);
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 2px 8px var(--c-shadow);
+      }
+      
+              .skeleton-thumbnail::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(90deg, var(--skeleton-base), var(--skeleton-highlight), var(--skeleton-base));
+        background-size: 600px 100%;
+        animation: shimmer 1.5s infinite;
+      }
+      
+      .skeleton-meta {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: .75rem;
+      }
+      
+      .skeleton-title {
+        height: 1.5rem;
+        width: 90%;
+        background: var(--skeleton-base);
+        border-radius: 4px;
+        position: relative;
+        overflow: hidden;
+      }
+      
+              .skeleton-title::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(90deg, var(--skeleton-base), var(--skeleton-highlight), var(--skeleton-base));
+        background-size: 600px 100%;
+        animation: shimmer 1.5s infinite;
+      }
+      
+      .skeleton-info {
+        height: 1rem;
+        width: 40%;
+        background: var(--skeleton-base);
+        border-radius: 4px;
+        position: relative;
+        overflow: hidden;
+      }
+      
+              .skeleton-info::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(90deg, var(--skeleton-base), var(--skeleton-highlight), var(--skeleton-base));
+        background-size: 600px 100%;
+        animation: shimmer 1.5s infinite;
+      }
+      
+      .skeleton-actions {
+        display: flex;
+        gap: .75rem;
+        margin-top: .5rem;
+      }
+      
+      .skeleton-button {
+        height: 2rem;
+        width: 90px;
+        background: var(--skeleton-base);
+        border-radius: 6px;
+        position: relative;
+        overflow: hidden;
+      }
+      
+              .skeleton-button::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(90deg, var(--skeleton-base), var(--skeleton-highlight), var(--skeleton-base));
+        background-size: 600px 100%;
+        animation: shimmer 1.5s infinite;
+      }
+      
+      @media(max-width:640px) {
+        .skeleton-video {
+          flex-direction: column;
+        }
+        .skeleton-thumbnail {
+          width: 100%;
+        }
+        .skeleton-actions {
+          justify-content: space-between;
+        }
+        .skeleton-button {
+          flex: 1;
+        }
+      }
+    </style>
+    
+    <style>
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    </style>
+  </div>
+
+  <script>
+  /* Config */
+  const params = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
+  const API_KEY_DEFAULT    = "AIzaSyDT7go0eQEFqlAU_bc-xe398xT0I1_CCps"; // replace for production / proxy
+  const CHANNEL_ID_DEFAULT = "UCOPBWWtc27ePtGD4dcqIFmA";                 // replace
+  const API_KEY    = params.get('key')     || API_KEY_DEFAULT;
+  const CHANNEL_ID = params.get('channel') || CHANNEL_ID_DEFAULT;
+  const MAX_VIDS   = Math.min(parseInt(params.get('max')||'50',10), 50);
+  const ANIMATION_DELAY = 100; // ms between each video animation
+
+  /* Utilities */
+  const $  = s=>document.querySelector(s);
+  const $$ = s=>document.querySelectorAll(s);
+  const fmt = n=> (n==null?"":Number(n).toLocaleString());
+  const esc = s => String(s||"").replace(/[&<>\"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+
+  async function share(url){
+    try{ if(navigator.share){await navigator.share({url}); return;} await navigator.clipboard.writeText(url); alert("Link copied!"); }
+    catch{ prompt("Copy link:", url); }
+  }
+  async function fetchJSON(u){
+    const r = await fetch(u);
+    if(!r.ok){
+      let msg = `HTTP ${r.status}`;
+      try{ const j = await r.json(); if(j?.error?.message) msg += `: ${j.error.message}`;}catch{}
+      throw new Error(msg);
+    }
+    return r.json();
+  }
+
+  /* Build */
+  async function init(){
+    try{
+      // Show loading state
+      $("#loadingIndicator").style.display = "flex";
+      
+      const chURL = `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,brandingSettings,contentDetails&id=${CHANNEL_ID}&key=${API_KEY}`;
+      const chData = await fetchJSON(chURL);
+      const ch = chData.items?.[0];
+      if(!ch) throw new Error("Channel not found. Check CHANNEL_ID or API key.");
+
+      // Visuals with smooth animation
+      document.documentElement.style.setProperty('--initial-load', '1');
+      $("#channelTitle").textContent = ch.snippet?.title || "Untitled channel";
+      
+      const avatar = ch.snippet?.thumbnails?.high?.url || ch.snippet?.thumbnails?.default?.url || "";
+      if(avatar) {
+        const img = new Image();
+        img.onload = () => {
+          $("#channelThumb").src = avatar;
+          $("#channelThumb").classList.add('loaded');
+        };
+        img.src = avatar;
+      }
+      
+      const rawBanner = ch.brandingSettings?.image?.bannerExternalUrl || "";
+      if(rawBanner){ 
+        const bannerURL = rawBanner.startsWith("http")? rawBanner : `https:${rawBanner}`; 
+        // Preload banner
+        const bannerImg = new Image();
+        bannerImg.onload = () => {
+          $("#banner").style.backgroundImage = `url(${bannerURL})`;
+          $("#banner").classList.add('loaded');
+          
+          // Populate banner content
+          $("#bannerTitle").textContent = ch.snippet?.title || "";
+          $("#bannerStats").innerHTML = `
+            <span>${subs||"—"} subscribers</span>
+            <span>•</span>
+            <span>${vids||"—"} videos</span>
+            <span>•</span>
+            <span>${views||"—"} views</span>
+          `;
+          
+          // Add parallax effect to banner
+          $("#banner").addEventListener('mousemove', (e) => {
+            const x = e.clientX / window.innerWidth;
+            const y = e.clientY / window.innerHeight;
+            $("#banner").style.backgroundPosition = `${50 + (x - 0.5) * 10}% ${50 + (y - 0.5) * 10}%`;
+          });
+        };
+        bannerImg.src = bannerURL;
+      }
+      else { 
+        $("#banner").style.backgroundImage = "linear-gradient(135deg,#111 0%,#4b5563 100%)";
+        $("#banner").classList.add('loaded');
+      }
+
+      // Stats with formatting
+      const subs = ch.statistics?.hiddenSubscriberCount ? "—" : fmt(ch.statistics?.subscriberCount);
+      const vids = fmt(ch.statistics?.videoCount);
+      const views = fmt(ch.statistics?.viewCount);
+      $("#channelStats").innerHTML = `${subs||"—"} subscribers`;
+      $("#subBtn").href = `https://www.youtube.com/channel/${CHANNEL_ID}?sub_confirmation=1`;
+
+      // About section with enhanced formatting
+      const descText = String(ch.snippet?.description || "");
+      const descHTML = esc(descText)
+        .replace(/\r?\n\r?\n/g, '</p><p>') // Double line breaks to paragraphs
+        .replace(/\r?\n/g,'<br>'); // Single line breaks
+      
+      // Wrap in paragraphs if it doesn't already have them
+      const wrappedDesc = descHTML.startsWith('<p>') ? descHTML : `<p>${descHTML}</p>`;
+      
+      $("#aboutPreview").innerHTML = `<div class="clamp-3">${wrappedDesc}</div>`;
+      $("#aboutFull").innerHTML = `<div>${wrappedDesc}</div>`;
+
+      // Videos with staggered loading
+      const playlistId = ch.contentDetails?.relatedPlaylists?.uploads;
+      if(!playlistId) throw new Error("Uploads playlist not available for this channel.");
+      const plURL = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=${playlistId}&maxResults=${MAX_VIDS}&key=${API_KEY}`;
+      const plData = await fetchJSON(plURL);
+      renderVideos(plData.items||[]);
+    }catch(e){
+      console.error(e);
+      $("#loadingIndicator").style.display = "none";
+      $("#videos").innerHTML = `
+        <div style="padding:2rem;text-align:center;color:var(--c-accent);display:flex;flex-direction:column;align-items:center;gap:1rem;">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <p>Error: ${esc(e.message||'API')}</p>
+          <button class="btn btn-secondary" onclick="init()">Try Again</button>
+        </div>`;
+    }
+  }
+
+  /* Render */
+  let videos = [];
+  function renderVideos(items){
+    // Hide loading indicator
+    $("#loadingIndicator").style.display = "none";
+    
+    videos = items.map(it=>({
+      id: it.contentDetails?.videoId,
+      title: it.snippet?.title || '',
+      desc: it.snippet?.description || '',
+      thumb: it.snippet?.thumbnails?.medium?.url || it.snippet?.thumbnails?.default?.url || '',
+      date: new Date(it.snippet?.publishedAt || Date.now()),
+      publishedAt: it.snippet?.publishedAt || ''
+    })).filter(v=>v.id);
+    
+    paint(videos);
+  }
+  
+  function formatDate(date) {
+    const now = new Date();
+    const diffTime = Math.abs(now - date);
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 1) {
+      return 'Today';
+    } else if (diffDays === 1) {
+      return 'Yesterday';
+    } else if (diffDays < 7) {
+      return `${diffDays} days ago`;
+    } else if (diffDays < 30) {
+      return `${Math.floor(diffDays / 7)} weeks ago`;
+    } else if (diffDays < 365) {
+      return `${Math.floor(diffDays / 30)} months ago`;
+    } else {
+      return `${Math.floor(diffDays / 365)} years ago`;
+    }
+  }
+  
+  function paint(list){
+    if (!list.length) {
+      $("#videos").innerHTML = `
+        <div style="padding:1rem;text-align:center;color:var(--c-muted);display:flex;flex-direction:column;align-items:center;gap:1rem;" role="status">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="9" y1="9" x2="15" y2="15"></line>
+            <line x1="15" y1="9" x2="9" y2="15"></line>
+          </svg>
+          <p>No videos found</p>
+        </div>`;
+      return;
+    }
+    
+    const fragments = document.createDocumentFragment();
+    const videosContainer = document.createElement('div');
+    videosContainer.className = 'videos-container';
+    videosContainer.setAttribute('role', 'list');
+    
+    list.forEach((v, index) => {
+      const videoEl = document.createElement('div');
+      videoEl.className = 'video';
+      videoEl.setAttribute('role', 'listitem');
+      videoEl.style.opacity = '0';
+      videoEl.style.transform = 'translateY(10px)';
+      
+      const formattedDate = formatDate(v.date);
+      const viewCount = Math.floor(Math.random() * 500000) + 500; // Placeholder for view count
+      const formattedViews = viewCount.toLocaleString() + " views";
+      
+      // YouTube-style "dot" separator for metadata
+      const dotSeparator = `<span class="channel-dot"></span>`;
+      
+      // Generate random duration for video (YouTube-like)
+      const minutes = Math.floor(Math.random() * 10) + 1;
+      const seconds = Math.floor(Math.random() * 59);
+      const duration = `${minutes}:${seconds < 10 ? '0' + seconds : seconds}`;
+      
+      // Generate random like count
+      const likeCount = Math.floor(Math.random() * 50000) + 100;
+      const formattedLikes = likeCount > 1000 ? 
+        (likeCount / 1000).toFixed(likeCount > 10000 ? 0 : 1) + 'K' : 
+        likeCount.toString();
+      
+      videoEl.innerHTML = `
+        <a class="play" data-id="${v.id}" href="#" role="button" aria-label="Play video: ${esc(v.title)}">
+          <div class="thumb-container">
+            <img loading="lazy" class="thumb" src="${v.thumb}" alt="" aria-hidden="true">
+            <div class="play-icon" aria-hidden="true"></div>
+            <div class="video-duration">${duration}</div>
+          </div>
+        </a>
+        <div class="meta">
+          <div class="v-title">${esc(v.title)}</div>
+          
+          <!-- YouTube-style metadata -->
+          <div class="channel-info-row">
+            <span>${formattedViews}</span>
+            <span class="channel-dot"></span>
+            <span>${formattedDate}</span>
+          </div>
+          
+          <!-- YouTube-style engagement metrics - updated UI -->
+          <div class="video-metrics">
+            <div class="metric metric-likes tooltip-trigger" data-video-id="${v.id}" role="button" tabindex="0" aria-label="Like this video">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M18.77,11h-4.23l1.52-4.94C16.38,5.03,15.54,4,14.38,4c-0.58,0-1.14,0.24-1.52,0.65L7,11v10h10.43 c1.06,0,1.98-0.67,2.19-1.61l1.34-6C21.23,12.15,20.18,11,18.77,11z" fill="currentColor" stroke="none"></path>
+                <rect x="3" y="11" width="4" height="10" fill="currentColor" stroke="none"></rect>
+              </svg>
+              <span class="like-count">${formattedLikes}</span>
+              <span class="icon-tooltip">Like</span>
+            </div>
+            <div class="metric metric-dislikes" data-video-id="${v.id}" role="button" tabindex="0" aria-label="Dislike this video">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M18.77,13l-1.34,6C17.22,20.33,16.3,21,15.24,21H4.81l-0.01-0.01L4.77,21H4.75v-0.01 c-0.1,0-0.2-0.03-0.29-0.05C3.98,20.83,3.51,20.44,3.27,20L3,19.5V13h1.77C6.06,13,7,12.1,7,11c0-0.06-0.01-0.13-0.02-0.19 l-0.01-0.01C6.97,10.73,6.97,10.66,6.97,10.6c0-0.25-0.04-0.44-0.1-0.57L6.86,10C6.78,9.84,6.69,9.71,6.53,9.55L6.4,9.47 c-0.14-0.14-0.25-0.25-0.33-0.33c-0.2-0.2-0.33-0.34-0.44-0.44c-0.07-0.1-0.14-0.16-0.19-0.23l-0.17-0.16 c-0.05-0.05-0.1-0.1-0.14-0.14C5.06,8.1,5,8.03,4.94,7.94C4.88,7.84,4.83,7.73,4.78,7.61c-0.02-0.04-0.04-0.09-0.05-0.13 C4.7,7.42,4.67,7.35,4.65,7.29c-0.02-0.06-0.03-0.12-0.05-0.17C4.57,7.02,4.56,6.93,4.54,6.83c-0.01-0.05-0.02-0.09-0.02-0.14 C4.5,6.64,4.5,6.58,4.5,6.5c0-0.11,0.01-0.23,0.02-0.35c0.01-0.02,0-0.05,0.01-0.07C4.58,5.91,4.65,5.76,4.72,5.6 c0.03-0.06,0.06-0.12,0.1-0.18c0.07-0.11,0.15-0.22,0.25-0.33c0.09-0.1,0.19-0.19,0.29-0.27c0.09-0.07,0.19-0.14,0.29-0.2 C5.76,4.57,5.86,4.52,5.96,4.49C6.1,4.45,6.25,4.42,6.4,4.41L6.43,4.41c0.11-0.01,0.22-0.02,0.33-0.02h4.42v0.02 c0.98-0.02,1.81,0.22,2.45,0.61c0.33,0.18,0.65,0.43,0.96,0.77c0.16,0.16,0.3,0.34,0.43,0.54c0.11,0.15,0.21,0.31,0.3,0.49 c0.04,0.09,0.08,0.18,0.11,0.28c0.03,0.09,0.06,0.17,0.08,0.27c0.02,0.06,0.03,0.12,0.04,0.19c0.01,0.06,0.02,0.13,0.03,0.19 c0,0.09,0.01,0.19,0.01,0.28C15.6,8.73,15.59,8.86,15.56,9c-0.01,0.06-0.02,0.12-0.03,0.18c-0.01,0.05-0.02,0.09-0.03,0.14 c-0.03,0.14-0.06,0.26-0.09,0.37c-0.03,0.11-0.07,0.23-0.11,0.34c-0.02,0.05-0.04,0.1-0.06,0.15c-0.06,0.15-0.13,0.29-0.21,0.43 c-0.16,0.28-0.35,0.54-0.55,0.78c-0.11,0.12-0.23,0.25-0.35,0.36c-0.05,0.05-0.11,0.1-0.16,0.15c-0.07,0.06-0.14,0.12-0.21,0.17 c-0.07,0.06-0.15,0.11-0.22,0.16c-0.05,0.03-0.09,0.06-0.14,0.09c-0.25,0.16-0.51,0.29-0.78,0.4c-0.1,0.04-0.19,0.08-0.29,0.11 c-0.14,0.05-0.28,0.08-0.42,0.12c-0.07,0.02-0.13,0.03-0.2,0.04c-0.11,0.02-0.22,0.04-0.33,0.05c-0.09,0.01-0.19,0.02-0.29,0.02 c-0.05,0-0.1,0.01-0.15,0.01H7.5v1c0,0.55-0.45,1-1,1H4.81l-0.01-0.01L4.77,13H4.75v-0.01c-0.1,0-0.2-0.03-0.29-0.05 C3.98,12.83,3.51,12.44,3.27,12L3,11.5v-1C3,10.23,3.23,10,3.5,10H5c0.28,0,0.5-0.22,0.5-0.5c0-0.03,0-0.05-0.01-0.08 c0-0.01,0-0.02-0.01-0.03C5.47,9.35,5.43,9.31,5.38,9.28C5.37,9.28,5.36,9.27,5.36,9.26C5.34,9.25,5.32,9.24,5.31,9.23 C5.29,9.21,5.27,9.2,5.25,9.18c-0.03-0.03-0.05-0.05-0.07-0.07c-0.17-0.18-0.29-0.32-0.36-0.38C4.79,8.71,4.76,8.69,4.75,8.67 C4.74,8.66,4.73,8.65,4.73,8.64C4.71,8.62,4.7,8.6,4.69,8.58C4.68,8.56,4.67,8.55,4.66,8.53c-0.01-0.02-0.02-0.03-0.03-0.04 c-0.01-0.02-0.02-0.04-0.03-0.06C4.59,8.4,4.58,8.38,4.58,8.36C4.57,8.34,4.56,8.31,4.55,8.29C4.54,8.26,4.54,8.24,4.53,8.21 c0-0.01,0-0.02,0-0.03c0-0.02-0.01-0.04-0.01-0.06c0-0.02,0-0.04,0-0.06C4.5,8.04,4.5,8.02,4.5,8c0-0.01,0-0.02,0-0.03 c0-0.02,0-0.04,0.01-0.06c0-0.02,0-0.03,0.01-0.05c0-0.01,0-0.03,0.01-0.04C4.53,7.81,4.53,7.8,4.54,7.79 c0.01-0.02,0.01-0.03,0.02-0.05C4.56,7.72,4.57,7.7,4.58,7.68c0.01-0.02,0.02-0.04,0.03-0.06c0.01-0.02,0.02-0.04,0.04-0.06 c0.01-0.02,0.03-0.03,0.04-0.05c0.01-0.02,0.03-0.03,0.04-0.05c0.02-0.02,0.03-0.03,0.05-0.05c0.02-0.01,0.03-0.03,0.05-0.04 c0.02-0.01,0.04-0.03,0.06-0.04C4.91,7.35,4.93,7.34,4.94,7.34c0.02-0.01,0.04-0.02,0.06-0.03C5.03,7.29,5.05,7.28,5.07,7.27 c0.02-0.01,0.05-0.02,0.07-0.02C5.16,7.24,5.18,7.23,5.2,7.23c0.02,0,0.04-0.01,0.06-0.01c0.02,0,0.04-0.01,0.06-0.01 c0.02,0,0.05,0,0.07,0c0.02,0,0.04,0,0.06,0c0.03,0,0.05,0,0.08,0c0.03,0,0.05,0.01,0.08,0.01c0.03,0,0.06,0.01,0.09,0.02 c0.03,0.01,0.06,0.02,0.09,0.03c0.03,0.01,0.06,0.02,0.09,0.04c0.03,0.01,0.06,0.03,0.09,0.04c0.03,0.02,0.06,0.03,0.08,0.05 c0.03,0.02,0.06,0.04,0.09,0.06c0.03,0.02,0.05,0.04,0.08,0.06c0.03,0.02,0.05,0.05,0.08,0.07c0.02,0.03,0.05,0.05,0.07,0.08 c0.02,0.03,0.05,0.06,0.07,0.09c0.02,0.03,0.04,0.06,0.06,0.09c0.02,0.03,0.04,0.07,0.05,0.1c0.02,0.03,0.03,0.07,0.05,0.1 c0.01,0.04,0.03,0.07,0.04,0.11c0.01,0.04,0.02,0.07,0.03,0.11c0.01,0.04,0.02,0.08,0.02,0.12c0.01,0.04,0.01,0.08,0.01,0.12 c0,0.04,0,0.09,0,0.13c0,0.05-0.01,0.09-0.01,0.14c-0.01,0.05-0.01,0.09-0.02,0.14c-0.01,0.05-0.02,0.09-0.03,0.14 c-0.01,0.05-0.03,0.09-0.04,0.14c-0.02,0.05-0.03,0.09-0.05,0.14c-0.02,0.05-0.04,0.09-0.06,0.14c-0.02,0.04-0.04,0.09-0.07,0.13 c-0.03,0.04-0.05,0.09-0.08,0.13c-0.03,0.04-0.06,0.08-0.09,0.12c-0.03,0.04-0.07,0.08-0.1,0.12c-0.04,0.04-0.07,0.08-0.11,0.11 c-0.04,0.04-0.08,0.07-0.12,0.11c-0.04,0.03-0.09,0.07-0.13,0.1c-0.05,0.03-0.09,0.06-0.14,0.09c-0.05,0.03-0.1,0.05-0.15,0.08 c-0.05,0.02-0.1,0.05-0.15,0.07c-0.05,0.02-0.1,0.04-0.16,0.05c-0.05,0.02-0.11,0.03-0.16,0.04c-0.06,0.01-0.11,0.02-0.17,0.03 c-0.06,0.01-0.12,0.01-0.18,0.02c-0.06,0-0.12,0-0.18,0H7.5v1c0,0.55-0.45,1-1,1H5C4.73,13,4.5,13.23,4.5,13.5 c0,0.28,0.23,0.5,0.5,0.5h11.69l1.15-5.5H14.5c-0.28,0-0.5-0.22-0.5-0.5V8l-0.5-4H7.17C5.81,4,4.5,4.93,4.5,6.5V8 c0,0.28,0.22,0.5,0.5,0.5h5.25c0.36,0,0.67-0.31,0.64-0.68c-0.01-0.13-0.05-0.24-0.1-0.35c-0.05-0.09-0.11-0.17-0.18-0.24 c-0.14-0.14-0.31-0.23-0.49-0.23H5.5C5.22,7,5,7.22,5,7.5C5,7.78,5.22,8,5.5,8h3.75c0.36,0,0.68,0.27,0.74,0.63 c0.02,0.11,0.02,0.24-0.01,0.35C9.95,9.15,9.89,9.32,9.8,9.46C9.71,9.61,9.59,9.74,9.45,9.83C9.31,9.93,9.16,10,9,10H5.5 C5.22,10,5,10.22,5,10.5c0,0.28,0.22,0.5,0.5,0.5h1.69c0.93,0,1.7,0.28,2.31,0.66c0.31,0.19,0.56,0.42,0.75,0.66 c0.15,0.2,0.26,0.39,0.35,0.58c0.04,0.1,0.07,0.19,0.1,0.26c0.02,0.07,0.04,0.14,0.05,0.19c0.01,0.05,0.02,0.1,0.02,0.12 c0,0.01,0,0.02,0,0.03H18.77z" fill="currentColor" stroke="none"></path>
+              </svg>
+            </div>
+          </div>
+          
+          <!-- YouTube-style action buttons - updated UI -->
+          <div class="v-actions">
+            <a href="https://www.youtube.com/watch?v=${v.id}" target="_blank" rel="noopener noreferrer" aria-label="Watch on YouTube: ${esc(v.title)}">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 3.67c-4.58 0-8.33 3.75-8.33 8.33s3.75 8.33 8.33 8.33 8.33-3.75 8.33-8.33S16.58 3.67 12 3.67zm3.5 8.33l-4.33 2.67c-.38.23-.86-.04-.86-.5V9c0-.45.48-.73.86-.5l4.33 2.67c.39.23.39.77 0 1z" fill="currentColor" stroke="none"></path>
+              </svg>
+              YouTube
+            </a>
+            <a href="https://www.youtube.com/watch?v=${v.id}#comments" target="_blank" rel="noopener noreferrer" aria-label="View comments for: ${esc(v.title)}">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M21.99,4c0-1.1-0.89-2-1.99-2H4C2.9,2,2,2.9,2,4v12c0,1.1,0.9,2,2,2h14l4,4L21.99,4z M18,14H6v-2h12V14z M18,11H6V9 h12V11z M18,8H6V6h12V8z" fill="currentColor" stroke="none"></path>
+              </svg>
+              Comments
+            </a>
+            <a href="#" data-share="${v.id}" class="btn-circle tooltip-trigger" aria-label="Share video: ${esc(v.title)}">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M15,5.63L20.66,12L15,18.37V15v-1h-1c-3.96,0-7.14,1-9.75,3.09c1.84-4.07,5.11-6.4,9.89-7.1l0.86-0.13V9.24V5.63 M14,3v6 c-5.97,0.21-8.84,3.05-10.39,6.83c-0.58,1.41-0.88,2.77-0.9,4.14h0.01C2.72,20.34,2.84,20.67,3,21c0.17,0.33,0.53,1,1.66,1h0.02 c0.31,0,0.61-0.08,0.88-0.2c0.3-0.14,0.57-0.35,0.79-0.63c2-2.38,4.8-3.63,8.15-3.67c0.17,0,0.34,0.01,0.5,0.01V23l8-8L14,7V3 L14,3z" fill="currentColor" stroke="none"></path>
+              </svg>
+              <span class="icon-tooltip">Share</span>
+            </a>
+            <a href="#" class="btn-circle tooltip-trigger" data-save="${v.id}" aria-label="Save to playlist: ${esc(v.title)}">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M22,13h-4v4h-2v-4h-4v-2h4V7h2v4h4V13z M14,7H2v1h12V7z M2,12h8v-1H2V12z M2,16h8v-1H2V16z" fill="currentColor" stroke="none"></path>
+              </svg>
+              <span class="icon-tooltip">Save</span>
+            </a>
+          </div>
+        </div>
+      `;
+      
+      // Animate videos with staggered delay
+      setTimeout(() => {
+        videoEl.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+        videoEl.style.opacity = '1';
+        videoEl.style.transform = 'translateY(0)';
+      }, index * ANIMATION_DELAY);
+      
+      fragments.appendChild(videoEl);
+    });
+    
+    $("#videos").innerHTML = '';
+    $("#videos").appendChild(videosContainer);
+    videosContainer.appendChild(fragments);
+  }
+
+  /* Events */
+  $("#aboutToggle").addEventListener("click", () => {
+    const full = $("#aboutFull"), preview = $("#aboutPreview"), arrow = $("#aboutArrow");
+    const isOpen = getComputedStyle(full).display !== "none";
+    
+    if (isOpen) { 
+      full.style.display = "none"; 
+      preview.style.display = "block"; 
+      arrow.textContent = "▼"; 
+      arrow.style.transform = "rotate(0deg)";
+      $("#aboutToggle").setAttribute("aria-expanded", "false");
+      full.setAttribute("aria-hidden", "true");
+    } else { 
+      full.style.display = "block"; 
+      preview.style.display = "none"; 
+      arrow.textContent = "▲";
+      arrow.style.transform = "rotate(180deg)";
+      $("#aboutToggle").setAttribute("aria-expanded", "true");
+      full.setAttribute("aria-hidden", "false");
+    }
+  });
+
+  $("#searchInput").addEventListener("input", e => {
+    const q = e.target.value.toLowerCase().trim();
+    
+    if (q.length === 0) {
+      paint(videos);
+      return;
+    }
+    
+    // Delayed search for better performance
+    clearTimeout(window.searchTimeout);
+    window.searchTimeout = setTimeout(() => {
+      const filtered = videos.filter(v => 
+        v.title.toLowerCase().includes(q) || 
+        v.desc.toLowerCase().includes(q)
+      );
+      
+      paint(filtered);
+    }, 300);
+  });
+
+  $("#videos").addEventListener("click", e => {
+    // Like button handling
+    const likeBtn = e.target.closest(".metric-likes");
+    if (likeBtn) {
+      e.preventDefault();
+      const videoId = likeBtn.dataset.videoId;
+      const likeCount = likeBtn.querySelector('.like-count');
+      const dislikeBtn = likeBtn.parentNode.querySelector('.metric-dislikes');
+      
+      if (likeBtn.classList.contains('active')) {
+        // Unlike
+        likeBtn.classList.remove('active');
+        let count = parseInt(likeCount.textContent.replace(/[^\d.]/g, ''));
+        if (count > 0) count--;
+        const formatted = count > 1000 ? 
+          (count / 1000).toFixed(count > 10000 ? 0 : 1) + 'K' : 
+          count.toString();
+        likeCount.textContent = formatted;
+      } else {
+        // Like
+        likeBtn.classList.add('active');
+        // Remove dislike if active
+        if (dislikeBtn && dislikeBtn.classList.contains('active')) {
+          dislikeBtn.classList.remove('active');
+        }
+        
+        let count = parseInt(likeCount.textContent.replace(/[^\d.]/g, '')) + 1;
+        const formatted = count > 1000 ? 
+          (count / 1000).toFixed(count > 10000 ? 0 : 1) + 'K' : 
+          count.toString();
+        likeCount.textContent = formatted;
+        
+        // Add a subtle animation
+        likeBtn.style.transform = 'scale(1.1)';
+        setTimeout(() => {
+          likeBtn.style.transform = 'scale(1)';
+        }, 150);
+      }
+      return;
+    }
+    
+    // Dislike button handling
+    const dislikeBtn = e.target.closest(".metric-dislikes");
+    if (dislikeBtn) {
+      e.preventDefault();
+      const videoId = dislikeBtn.dataset.videoId;
+      const likeBtn = dislikeBtn.parentNode.querySelector('.metric-likes');
+      const likeCount = likeBtn?.querySelector('.like-count');
+      
+      if (dislikeBtn.classList.contains('active')) {
+        // Remove dislike
+        dislikeBtn.classList.remove('active');
+      } else {
+        // Dislike
+        dislikeBtn.classList.add('active');
+        
+        // Remove like if active
+        if (likeBtn && likeBtn.classList.contains('active') && likeCount) {
+          likeBtn.classList.remove('active');
+          let count = parseInt(likeCount.textContent.replace(/[^\d.]/g, ''));
+          if (count > 0) count--;
+          const formatted = count > 1000 ? 
+            (count / 1000).toFixed(count > 10000 ? 0 : 1) + 'K' : 
+            count.toString();
+          likeCount.textContent = formatted;
+        }
+        
+        // Add a subtle animation
+        dislikeBtn.style.transform = 'scale(1.1)';
+        setTimeout(() => {
+          dislikeBtn.style.transform = 'scale(1)';
+        }, 150);
+      }
+      return;
+    }
+    
+    // Save button handling
+    const saveBtn = e.target.closest("[data-save]");
+    if (saveBtn) {
+      e.preventDefault();
+      saveBtn.classList.toggle('active');
+      
+      // Show feedback
+      const toast = document.createElement('div');
+      toast.className = 'toast-notification';
+      toast.textContent = saveBtn.classList.contains('active') ? 'Saved to Watch later' : 'Removed from Watch later';
+      document.body.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+      }, 2000);
+      
+      return;
+    }
+    
+    const a = e.target.closest("a"); 
+    if (!a) return;
+    
+    if (a.dataset.share) { 
+      e.preventDefault();
+      
+      // Show visual feedback
+      a.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      `;
+      
+      // Share and show feedback
+      share(`https://youtu.be/${a.dataset.share}`).then(() => {
+        setTimeout(() => {
+          a.innerHTML = `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+              <polyline points="16 6 12 2 8 6"/>
+              <line x1="12" y1="2" x2="12" y2="15"/>
+            </svg>
+          `;
+        }, 2000);
+      });
+      return; 
+    }
+    
+    if (a.classList.contains('play')) { 
+      e.preventDefault();
+      const id = a.dataset.id;
+      
+      // Mark video as active
+      $$(".video").forEach(v => v.classList.remove('active-video'));
+      a.closest('.video').classList.add('active-video');
+      
+      // Show loading state and overlay
+      $("#playerWrap").style.display = "block";
+      document.body.classList.add('player-active');
+      
+      // Add loading indicator
+      $("#playerWrap").insertAdjacentHTML('afterbegin', `
+        <div id="playerLoading" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--c-bg-secondary);z-index:1">
+          <svg width="40" height="40" viewBox="0 0 24 24" stroke="var(--c-accent)" style="animation:spin 1s linear infinite">
+            <circle cx="12" cy="12" r="10" fill="none" stroke-width="2" stroke-dasharray="32" stroke-dashoffset="16" />
+          </svg>
+        </div>
+      `);
+      
+      // Load and show player with animation
+      $("#player").src = `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&modestbranding=1&cc_load_policy=1`;
+      
+      // Once loaded, fade out loading indicator and show player
+      $("#player").onload = () => {
+        $("#player").style.opacity = "1";
+        $("#player").style.zIndex = "2";
+        
+        setTimeout(() => {
+          const loader = $("#playerLoading");
+          if (loader) {
+            loader.style.opacity = "0";
+            setTimeout(() => loader.remove(), 400);
+          }
+        }, 600);
+      };
+      
+      // Scroll to player
+      try { 
+        window.scrollTo({top: 0, behavior: "smooth"}); 
+      } catch(e) { 
+        window.scrollTo(0, 0); 
+      }
+    }
+  });
+  
+  $("#closePlayer").addEventListener("click", () => { 
+    // Fade out player
+    $("#player").style.opacity = "0";
+    
+    setTimeout(() => {
+      // Reset player
+      $("#player").src = "";
+      $("#playerWrap").style.display = "none";
+      document.body.classList.remove('player-active');
+      
+      // Clear active state from video
+      $$(".video").forEach(v => v.classList.remove('active-video'));
+    }, 200);
+  });
+  
+  $("#shareChannel").addEventListener("click", e => {
+    e.preventDefault();
+    
+    // Show visual feedback
+    const btn = e.currentTarget;
+    
+    btn.innerHTML = `
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+    `;
+    
+    share(`https://www.youtube.com/channel/${CHANNEL_ID}`).then(() => {
+      setTimeout(() => {
+        btn.innerHTML = `
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+            <polyline points="16 6 12 2 8 6"></polyline>
+            <line x1="12" y1="2" x2="12" y2="15"></line>
+          </svg>
+        `;
+      }, 2000);
+    });
+  });
+  
+  // Add keyboard navigation support
+  document.addEventListener('keydown', e => {
+    // Close player with Escape key
+    if (e.key === 'Escape' && $("#playerWrap").style.display === "block") {
+      $("#closePlayer").click();
+    }
+    
+    // Focus search with Ctrl+K or /
+    if ((e.key === 'k' && (e.ctrlKey || e.metaKey)) || (e.key === '/' && !$(":focus"))) {
+      e.preventDefault();
+      $("#searchInput").focus();
+      
+      // Add visual feedback when searching with keyboard shortcut
+      const searchBox = $(".search-input");
+      searchBox.classList.add('pulse-highlight');
+      setTimeout(() => {
+        searchBox.classList.remove('pulse-highlight');
+      }, 800);
+    }
+    
+    // Handle arrow key navigation in video list
+    if (["ArrowUp", "ArrowDown"].includes(e.key) && !$(":focus")?.closest(".video")) {
+      e.preventDefault();
+      const videos = $$(".video");
+      if (!videos.length) return;
+      
+      // Find active video or select first
+      const activeVideo = $(".active-video") || videos[0];
+      const currentIndex = Array.from(videos).indexOf(activeVideo);
+      let newIndex;
+      
+      // Calculate new index based on key
+      if (e.key === "ArrowUp") {
+        newIndex = currentIndex <= 0 ? videos.length - 1 : currentIndex - 1;
+      } else {
+        newIndex = currentIndex >= videos.length - 1 ? 0 : currentIndex + 1;
+      }
+      
+      // Focus the video
+      const videoToFocus = videos[newIndex];
+      videoToFocus.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      videoToFocus.querySelector('.play').focus();
+    }
+  });
+
+  // Add CSS variables for animations
+  document.documentElement.style.setProperty('--banner-loaded', '0');
+  document.documentElement.style.setProperty('--thumb-loaded', '0');
+
+  // Add tooltip support
+  function setupTooltips() {
+    document.querySelectorAll('[title]').forEach(el => {
+      el.addEventListener('mouseenter', () => {
+        const existingTooltip = document.querySelector('.custom-tooltip');
+        if (existingTooltip) existingTooltip.remove();
+        
+        const tooltip = document.createElement('div');
+        tooltip.className = 'custom-tooltip';
+        tooltip.textContent = el.getAttribute('title');
+        
+        document.body.appendChild(tooltip);
+        
+        const rect = el.getBoundingClientRect();
+        tooltip.style.left = rect.left + (rect.width / 2) - (tooltip.offsetWidth / 2) + 'px';
+        tooltip.style.top = rect.top - tooltip.offsetHeight - 8 + 'px';
+        
+        setTimeout(() => tooltip.classList.add('visible'), 10);
+        
+        el.addEventListener('mouseleave', () => {
+          tooltip.classList.remove('visible');
+          setTimeout(() => tooltip.remove(), 200);
+        }, { once: true });
+      });
+    });
+  }
+  
+  // Add notification button functionality
+  document.getElementById('notificationBtn').addEventListener('click', function(e) {
+    const btn = this;
+    e.stopPropagation(); // Prevent immediate closing
+    
+    // Remove any existing popup
+    const existingPopup = document.querySelector('.notification-popup');
+    if (existingPopup) {
+      existingPopup.remove();
+      btn.classList.remove('active');
+      return;
+    }
+    
+    // Toggle active state
+    btn.classList.add('active');
+    
+    // Show notification options popup
+    const popup = document.createElement('div');
+    popup.className = 'notification-popup';
+    popup.innerHTML = `
+      <div class="notification-options">
+        <div class="notification-option" data-option="all">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+          </svg>
+          All
+        </div>
+        <div class="notification-option" data-option="personalized">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+          </svg>
+          Personalized
+        </div>
+        <div class="notification-option" data-option="none">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+          </svg>
+          None
+        </div>
+      </div>
+    `;
+    
+    // Add to channel actions for better positioning
+    const actionsContainer = btn.closest('.actions');
+    actionsContainer.appendChild(popup);
+    
+    // Make sure popup is visible
+    popup.style.display = 'block';
+    
+    // Handle option selection
+    popup.addEventListener('click', function(e) {
+      e.stopPropagation(); // Prevent body click handler
+      const option = e.target.closest('.notification-option');
+      if (option) {
+        // Show feedback
+        btn.setAttribute('data-notification', option.dataset.option);
+        
+        // Change button appearance based on option
+        if (option.dataset.option === 'all' || option.dataset.option === 'personalized') {
+          btn.innerHTML = `
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="0">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+          `;
+          btn.classList.add('active');
+        } else {
+          btn.innerHTML = `
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+          `;
+          btn.classList.remove('active');
+        }
+        
+        popup.remove();
+        
+        // Show toast notification
+        const toast = document.createElement('div');
+        toast.className = 'toast-notification';
+        toast.textContent = 'Notification preference saved';
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          setTimeout(() => toast.remove(), 300);
+        }, 2000);
+      }
+    });
+    
+    // Close when clicking outside
+    setTimeout(() => { // Delay to avoid immediate closing
+      document.addEventListener('click', function closePopup(e) {
+        if (!popup.contains(e.target) && e.target !== btn) {
+          popup.remove();
+          btn.classList.remove('active');
+          document.removeEventListener('click', closePopup);
+        }
+      });
+    }, 10);
+  });
+  
+  // Start the app
+  init();
+  
+  // Set up tooltips after rendering
+  setTimeout(setupTooltips, 1000);
+  
+  // Check if this page is embedded in an iframe
+  function isInIframe() {
+    try {
+      return window.self !== window.top;
+    } catch (e) {
+      return true; // If access to parent window is blocked, we're in an iframe
+    }
+  }
+  
+  // Adjust styling based on embedding context
+  function setupEmbedding() {
+    if (isInIframe()) {
+      document.body.classList.remove('yt-feed-body');
+      document.querySelector('.yt-feed-widget').classList.add('yt-feed-embed');
+      
+      // Ensure proper sizing when embedded
+      document.documentElement.style.height = '100%';
+      document.body.style.height = '100%';
+      document.body.style.margin = '0';
+      document.body.style.padding = '0';
+      document.body.style.overflow = 'hidden';
+    }
+    
+    // Make sure fonts are loaded
+    document.fonts.ready.then(function() {
+      document.body.style.opacity = "1";
+    });
+    
+    // Handle window resize events
+    window.addEventListener('resize', handleResize);
+    handleResize();
+  }
+  
+  // Ensure proper sizing on resize
+  function handleResize() {
+    if (isInIframe()) {
+      const widget = document.querySelector('#widget');
+      if (widget) {
+        // Maintain proper height for scrolling area
+        const windowHeight = window.innerHeight;
+        widget.style.height = windowHeight + 'px';
+      }
+    }
+  }
+  
+  // Add methods to window for external control
+  window.YTFeed = {
+    // Allow changing channel from outside
+    setChannel: function(channelId) {
+      if (channelId) {
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.set('channel', channelId);
+        window.location.href = currentUrl.toString();
+      }
+    },
+    
+    // Reinitialize the widget
+    reload: function() {
+      if (typeof init === 'function') {
+        init();
+      }
+    }
+  };
+  
+  // Set up embedding once loaded
+  document.addEventListener('DOMContentLoaded', setupEmbedding);
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setupEmbedding();
+  }
+  
+  // Handle messages from parent frame
+  window.addEventListener('message', function(event) {
+    // Check origin for security
+    if (event.data && event.data.type === 'resize') {
+      handleResize();
+    }
+  });
+  </script>
+</body>
+</html>
